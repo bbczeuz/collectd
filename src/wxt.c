@@ -317,7 +317,8 @@ int connect_client (const char *hostname,
 	ressave = res;
 
 	sockfd=-1;
-	while (res) {
+	while (res)
+	{
 		sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 
 		if (!(sockfd < 0))
@@ -404,13 +405,21 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 
 	while (1)
 	{
+		if (resp_buf_size<=resp_buf_used)
+		{
+			//TODO: Nicer error handling
+			//Close connection
+			close(sock);
+			return -3;
+
+		}
 		rc = recv(sock,resp_buf_head,resp_buf_size-resp_buf_used,0);
 		if (rc == -1)
 		{
 			//TODO: Nicer error handling
 			//Close connection
 			close(sock);
-			return -3;
+			return -4;
 		} else if (rc == 0)
 		{
 			//Remote connection shutdown
@@ -430,7 +439,15 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 			//No \n\r found
 			continue;
 		}
-		for (now_
+		next_line_used = next_line_end - next_line_start;
+		++next_line_used;
+		++next_line_start;
+		*next_line_start = next_line_end + 2;
+		if (next_line_used == line_size+(sizeof(line_size)/sizeof(line_size[0])))
+		{
+			//received all lines
+			break;
+		}
 	}
 	
 
