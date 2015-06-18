@@ -1262,6 +1262,16 @@ write_tsdb_la_SOURCES = write_tsdb.c
 write_tsdb_la_LDFLAGS = $(PLUGIN_LDFLAGS)
 endif
 
+if BUILD_PLUGIN_WXT
+pkglib_LTLIBRARIES += wxt.la
+wxt_la_SOURCES = wxt.c
+wxt_la_LDFLAGS = $(PLUGIN_LDFLAGS)
+wxt_la_LIBADD =
+if BUILD_WITH_LIBSOCKET
+wxt_la_LIBADD += -lsocket
+endif
+endif
+
 if BUILD_PLUGIN_XMMS
 pkglib_LTLIBRARIES += xmms.la
 xmms_la_SOURCES = xmms.c

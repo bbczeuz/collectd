@@ -1,4 +1,5 @@
 absolute		value:ABSOLUTE:0:U
+angle                   value:GAUGE:0:360
 apache_bytes		value:DERIVE:0:U
 apache_connections	value:GAUGE:0:65535
 apache_idle_workers	value:GAUGE:0:65535
@@ -193,6 +194,7 @@ smart_attribute         current:GAUGE:0:255, worst:GAUGE:0:255, threshold:GAUGE:
 snr			value:GAUGE:0:U
 spam_check		value:GAUGE:0:U
 spam_score		value:GAUGE:U:U
+speed                   value:GAUGE:0:U
 spl			value:GAUGE:U:U
 swap_io			value:DERIVE:0:U
 swap			value:GAUGE:0:1099511627776
