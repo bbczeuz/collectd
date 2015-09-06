@@ -23,6 +23,15 @@
  *   Claudius Zingerli <bugs-wxtmail@zeuz.ch> and the developers of apcups.c
  **/
 
+/* Request: 0R\r\n
+ * Response:
+ * $WIXDR,C,24.1,C,0,H,43.7,P,0,P,969.9,H,0*46\r\n
+ * $WIXDR,V,0.00,M,0,Z,10,s,0,R,0.0,M,0,V,0.0,M,1,Z,0,s,1,R,0.0,M,1*50\r\n
+ * $WIXDR,C,23.5,C,2,U,24.1,N,0,U,24.5,V,1,U,3.520,V,2*7E\r\n
+ * Request: 0XU\r\n
+ * Response:
+ * 0XU,A=0,M=Q,T=0,C=2,I=0,B=19200,D=8,P=N,S=1,L=20,N=WXT520,V=2.14\r\n
+ */
 #include "collectd.h"
 #include "common.h"      /* rrd_update_file */
 #include "plugin.h"      /* plugin_register, plugin_submit */
