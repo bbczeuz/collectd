@@ -53,6 +53,7 @@
 
 #define MAXSTRING   1024
 #define MODULE_NAME "wxt"
+#define DEFAULT_VARS_SIZE 128
 
 #define S2T_DEFAULT_HOST "localhost"
 #define S2T_DEFAULT_PORT "4001"
@@ -110,23 +111,7 @@ static const char *g_config_keys[] =
 };
 static int g_config_keys_num = STATIC_ARRAY_SIZE (g_config_keys);
 
-#if 0
-static int net_shutdown (int *fd)
-{
-	uint16_t packet_size = 0;
-
-	if ((fd == NULL) || (*fd < 0))
-		return (EINVAL);
-
-	swrite (*fd, (void *) &packet_size, sizeof (packet_size));
-	close (*fd);
-	*fd = -1;
-
-	return (0);
-} /* int net_shutdown */
-#endif
-
-/* Close the network connection */
+/* Close the network connection and free variables */
 static int wxt_shutdown (void)
 {
 	if (g_conf_host != NULL)
@@ -143,164 +128,9 @@ static int wxt_shutdown (void)
 	return (0);
 } /* int wxt_shutdown */
 
-/*
- * Open a TCP connection to the UPS network server
- * Returns -1 on error
- * Returns socket file descriptor otherwise
- */
-#if 0
-static int net_open (char *host, int port)
-{
-	int              sd;
-	int              status;
-	char             port_str[8];
-	struct addrinfo  ai_hints;
-	struct addrinfo *ai_return;
-	struct addrinfo *ai_list;
-
-	assert ((port > 0x00000000) && (port <= 0x0000FFFF));
-
-	/* Convert the port to a string */
-	ssnprintf (port_str, sizeof (port_str), "%i", port);
-
-	/* Resolve name */
-	memset ((void *) &ai_hints, '\0', sizeof (ai_hints));
-	ai_hints.ai_family   = AF_INET; /* XXX: Change this to `AF_UNSPEC' if wxtd can handle IPv6 */
-	ai_hints.ai_socktype = SOCK_STREAM;
-
-	status = getaddrinfo (host, port_str, &ai_hints, &ai_return);
-	if (status != 0)
-	{
-		char errbuf[1024];
-		INFO ("getaddrinfo failed: %s",
-				(status == EAI_SYSTEM)
-				? sstrerror (errno, errbuf, sizeof (errbuf))
-				: gai_strerror (status));
-		return (-1);
-	}
-
-	/* Create socket */
-	sd = -1;
-	for (ai_list = ai_return; ai_list != NULL; ai_list = ai_list->ai_next)
-	{
-		sd = socket (ai_list->ai_family, ai_list->ai_socktype, ai_list->ai_protocol);
-		if (sd >= 0)
-			break;
-	}
-	/* `ai_list' still holds the current description of the socket.. */
-
-	if (sd < 0)
-	{
-		DEBUG ("Unable to open a socket");
-		freeaddrinfo (ai_return);
-		return (-1);
-	}
-
-	status = connect (sd, ai_list->ai_addr, ai_list->ai_addrlen);
-
-	freeaddrinfo (ai_return);
-
-	if (status != 0) /* `connect(2)' failed */
-	{
-		char errbuf[1024];
-		INFO ("connect failed: %s",
-				sstrerror (errno, errbuf, sizeof (errbuf)));
-		close (sd);
-		return (-1);
-	}
-
-	DEBUG ("Done opening a socket %i", sd);
-
-	return (sd);
-} /* int net_open (char *host, char *service, int port) */
-#endif
-
-/*
- * Receive a message from the other end. Each message consists of
- * two packets. The first is a header that contains the size
- * of the data that follows in the second packet.
- * Returns number of bytes read
- * Returns 0 on end of file
- * Returns -1 on hard end of file (i.e. network connection close)
- * Returns -2 on error
- */
-#if 0
-static int net_recv (int *sockfd, char *buf, int buflen)
-{
-	uint16_t packet_size;
-
-	/* get data size -- in short */
-	if (sread (*sockfd, (void *) &packet_size, sizeof (packet_size)) != 0)
-	{
-		close (*sockfd);
-		*sockfd = -1;
-		return (-1);
-	}
-
-	packet_size = ntohs (packet_size);
-	if (packet_size > buflen)
-	{
-		ERROR ("wxt plugin: Received %"PRIu16" bytes of payload "
-				"but have only %i bytes of buffer available.",
-				packet_size, buflen);
-		close (*sockfd);
-		*sockfd = -1;
-		return (-2);
-	}
-
-	if (packet_size == 0)
-		return (0);
-
-	/* now read the actual data */
-	if (sread (*sockfd, (void *) buf, packet_size) != 0)
-	{
-		close (*sockfd);
-		*sockfd = -1;
-		return (-1);
-	}
-
-	return ((int) packet_size);
-} /* static int net_recv (int *sockfd, char *buf, int buflen) */
-#endif
-
-/*
- * Send a message over the network. The send consists of
- * two network packets. The first is sends a short containing
- * the length of the data packet which follows.
- * Returns zero on success
- * Returns non-zero on error
- */
-#if 0
-static int net_send (int *p_sock, const char *p_buf, size_t p_buf_size)
-{
-	uint16_t packet_size;
-
-	assert (*p_sock >= 0);
-
-	/* send short containing size of data packet */
-	packet_size = htons ((uint16_t) p_buf_size);
-
-	if (swrite (*p_sock, (void *) &packet_size, sizeof (packet_size)) != 0)
-	{
-		close (*p_sock);
-		*p_sock = -1;
-		return (-1);
-	}
-
-	/* send data packet */
-	if (swrite (*p_sock, (void *) p_buf, p_buf_size) != 0)
-	{
-		close (*p_sock);
-		*p_sock = -1;
-		return (-2);
-	}
-
-	return (0);
-}
-#endif
 
 //Code based on from http://long.ccaba.upc.edu/long/045Guidelines/eva/ipv6.html
-int connect_client (const char *hostname,
+static int connect_client (const char *hostname,
                 const char *service,
                 int         family,
                 int         socktype,
@@ -357,15 +187,263 @@ int connect_client (const char *hostname,
 }
 
 
+static int wxt_split_varval(char *p_line, size_t p_line_size, const char p_var_term, const char p_val_term, char **p_vars, char **p_vals, size_t *p_vars_size )
+{
+	assert(p_line);
+	assert(p_vars);
+	assert(p_vals);
+	assert(p_vars_size);
+	assert(p_line_size);
+
+	p_vars[0] = p_line;
+	char **now_var = p_vars;
+	char **now_val = p_vals;
+	size_t vars_size = 0;
+	while (vars_size < *p_vars_size)
+	{
+		//Extract variable name
+		char *now_var_end = memchr(*now_var,p_var_term,p_line_size);
+		if (now_var_end == NULL)
+		{
+			//No variable terminator found
+			break;
+		}
+		if (now_var_end == *now_var + p_line_size)
+		{
+			//No space for values
+			break;
+		}
+		*now_var_end = 0;
+		p_line_size -= now_var_end - *now_var +1;
+//		DEBUG("wxt plugin: Found variable \"%s\" (remaining size = %lu)", *now_var,p_line_size);
+		*now_val      = now_var_end+1;
+		++now_var;
+
+		//Extract variable value
+		char *now_val_end = memchr(*now_val,p_val_term,p_line_size);
+		if (now_val_end == NULL)
+		{
+			now_val_end = memchr(*now_val,'\r',p_line_size); //End of line
+			if (now_val_end == NULL)
+			{
+				//No value terminator found -> end of line
+				if (p_line_size == 0)
+				{
+					//No space left
+					break;
+				} else {
+					now_val_end = *now_val + p_line_size;
+				}
+			}
+		}
+		*now_val_end = 0;
+//		DEBUG("wxt plugin: now_var_end = %s, *now_val = %s", now_var_end,*now_val);
+		p_line_size -= now_var_end - *now_val +1;
+//		DEBUG("wxt plugin: Found value \"%s\" (remaining size = %lu)", *now_val,p_line_size);
+		*now_var = now_val_end+1;
+		++now_val;
+		++vars_size;
+	}
+	*p_vars_size = vars_size;
+	return 0;
+}
+
+static int wxt_process_command(int p_socket, const char *p_request, const size_t p_resp_buf_size, const size_t p_line_count, char **p_line_starts, size_t *p_line_size)
+{
+	DEBUG("wxt plugin: Sending request");
+	size_t request_size = strlen(p_request);
+	int rc = send(p_socket,p_request,request_size,0);
+	if (rc != request_size)
+	{
+		//Close connection
+		DEBUG("wxt plugin: Error sending request. errno=%d, msg=\"%s\"", errno, strerror(errno));
+		return -2;
+	}
+
+	//Receive response
+	size_t resp_buf_used = 0;
+	char *resp_buf_head = p_line_starts[0];
+	size_t *now_line_used = &p_line_size[0];
+	char **now_line_start = &p_line_starts[0];
+
+	DEBUG("wxt plugin: Receiving response");
+	while (1)
+	{
+		if (p_resp_buf_size<=resp_buf_used)
+		{
+			ERROR("wxt plugin: Buffer too small to fit response (size: %lu, needed: %lu)", p_resp_buf_size, resp_buf_used);
+			return -3;
+
+		}
+		rc = recv(p_socket,resp_buf_head,p_resp_buf_size-resp_buf_used,0);
+		if (rc == -1)
+		{
+			ERROR("wxt plugin: Error receiving data. errno = %d, msg = \"%s\"", errno,strerror(errno));
+			return -4;
+		} else if (rc == 0)
+		{
+			//Remote connection shutdown
+			ERROR("wxt plugin: Remote connection shutdown");
+			break;
+		}
+		resp_buf_head += rc;
+		*resp_buf_head = 0;
+		resp_buf_used  = resp_buf_head - p_line_starts[0];
+
+		//Parse buffer
+		*now_line_used = resp_buf_head - *now_line_start;
+		DEBUG("wxt plugin: *now_line_start = %s", *now_line_start);
+		DEBUG("wxt plugin: *now_line_used  = %lu", *now_line_used);
+
+		//Loop as long as \r found
+		char *now_line_end;
+		while ((now_line_end = memchr(*now_line_start,'\r', *now_line_used)) != NULL)
+		{
+			if ((now_line_end + 1 >= resp_buf_head) || (now_line_end[1] != '\n'))
+			{
+				//No \r\n found; more data needed
+				DEBUG("wxt plugin: No more line terminators found; waiting for more data");
+				break;
+			} else {
+				//Received complete line
+				*now_line_end = 0;
+				DEBUG("wxt plugin: Line completed: %s", *now_line_start);
+				*now_line_used = now_line_end - *now_line_start;
+
+				//Check if last line
+				if ((now_line_start-p_line_starts) >= p_line_count)
+				{
+					break;
+				} else {
+					//Move to next line
+					++now_line_used;
+					++now_line_start;
+					*now_line_start = now_line_end + 2; //Move past \r\n
+					*now_line_used  = resp_buf_head - *now_line_start;
+					DEBUG("wxt plugin: resp_buf = %s, resp_buf_head-resp_buf = %lu, resp_buf_used = %lu, *now_line_used = %lu, **now_line_start = %s", p_line_starts[0], resp_buf_head-p_line_starts[0],resp_buf_used,*now_line_used,*now_line_start);
+				}
+			}
+		}
+		DEBUG("wxt plugin: Looping for more data");
+
+		//Check if all lines are received
+		if ((now_line_start-p_line_starts) >= p_line_count)
+		{
+			//received all lines
+			break;
+		}
+		//Loop for more data
+	}
+	return 0;
+}
+
+static int wxt_process_split_command(int p_socket,const char *p_command, const size_t p_resp_n_lines, const char *p_line_header, const char p_var_term, const char p_val_term, char ***p_vars,char ***p_vals, size_t *p_vars_size)
+{
+	int i;
+	const size_t resp_buf_size = 1024;
+	char *resp_buf = malloc(resp_buf_size);
+	memset(resp_buf,0,resp_buf_size);
+
+	char **line_starts = malloc(sizeof(char*  )*p_resp_n_lines);
+	size_t *line_size  = malloc(sizeof(size_t*)*p_resp_n_lines);
+
+	line_starts[0] = resp_buf;
+	memset(line_size,0,sizeof(size_t*)*p_resp_n_lines);
+
+	if (wxt_process_command(p_socket,p_command,resp_buf_size, p_resp_n_lines, line_starts, line_size) != 0)
+	{
+		ERROR("wxt plugin:  wxt_process_command(p_socket,p_command,resp_buf_size, p_resp_n_lines, line_starts, line_size) failed");
+		free(line_size);
+		free(line_starts);
+		free(resp_buf);
+		return 1;
+	}
+
+/* typical data:
+ * [2015-09-08 13:37:59] wxt plugin: Line[0] = "$WIXDR,C,26.7,C,0,H,30.2,P,0,P,971.5,H,0*46"
+ * [2015-09-08 13:37:59] wxt plugin: Line[1] = "$WIXDR,V,0.09,M,0,Z,170,s,0,R,0.0,M,0,V,0.0,M,1,Z,0,s,1,R,0.0,M,1*6E"
+ * [2015-09-08 13:37:59] wxt plugin: Line[2] = "$WIXDR,C,27.9,C,2,U,24.1,N,0,U,24.5,V,1,U,3.521,V,2*77"
+ */
+	
+	DEBUG("wxt plugin: Received all data");
+	for (i=0; i<p_resp_n_lines; ++i)
+	{
+		DEBUG("wxt plugin: Line[%d] = \"%s\" (size=%lu)", i,line_starts[i],line_size[i]);
+	}
+	
+	//Skip header
+	if ((line_size[0]>strlen(p_line_header)) && (memcmp(line_starts[0], p_line_header,strlen(p_line_header)) == 0))
+	{
+		line_starts[0] += strlen(p_line_header);
+		line_size[0]   -= strlen(p_line_header); 
+	} else {
+		WARNING("wxt plugin: Line[0]: Missing header");
+	}
+
+	//Split into variable - value pairs
+	size_t vars_size;
+	char **vars;
+	char **vals;
+	assert(p_vars_size);
+	if (*p_vars_size == 0)
+	{
+		vars_size = DEFAULT_VARS_SIZE;
+		vars = malloc(sizeof(char*)*vars_size);		
+		vals = malloc(sizeof(char*)*vars_size);		
+		*p_vars = vars;
+		*p_vals = vals;
+	} else {
+		assert(p_vars);
+		assert(p_vals);
+		vars = *p_vars;
+		vals = *p_vals;
+		vars_size = *p_vars_size;
+	}
+	DEBUG("wxt plugin: Splitting into up to %lu var/val pairs", vars_size);
+	wxt_split_varval(line_starts[0], line_size[0], p_var_term, p_val_term, vars, vals, &vars_size );
+
+	int now_var;
+	for (now_var = 0; now_var < vars_size; ++now_var)
+	{
+		DEBUG("wxt plugin: var[%d]: \"%s\" = \"%s\"", now_var, vars[now_var], vals[now_var]);
+	}
+	*p_vars_size = vars_size;
+	
+	free(line_starts);
+	free(line_size);
+	return 0;
+}
+
+static char *wxt_pair_get(char **p_vars, char **p_vals, const size_t p_vars_size, const char *p_searched_var)
+{
+	size_t now_var;
+	assert(p_vars);
+	assert(p_vals);
+	for (now_var = 0; now_var < p_vars_size; ++now_var)
+	{
+		if (p_vars[now_var] == NULL)
+		{
+			continue;
+		}
+		if (strcmp(p_vars[now_var], p_searched_var) == 0)
+		{
+			return p_vals[now_var];
+		}
+	}
+	return NULL;
+}
+
 /* Get and print status from weather station */
 static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s *p_wxt_detail)
 {
 #if 1
 	assert(p_host);assert(p_port);
+
 	//Retry
 	int now_try = 0;
-	int failed = 0;
+	int failed = 1;
 	int sock = -1;
+	DEBUG("wxt plugin: Connecting to %s:%s", p_host, p_port);
 	while (1)
 	{
 		//Resolve host, Open socket, Set timeout and connect to Serial2Tcp server
@@ -373,97 +451,127 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 		
 		if (sock != -1)
 		{
-			//Request data
-			
-			//Close connection
-			close(sock);
+			failed = 0;
 			break;
 		}
 		if (++now_try>g_conf_retries)
 		{
-			failed = 1;
 			break;
 		}
+
+		DEBUG("wxt plugin: Retrying...");
 	}
 	if (failed)
 	{
+		DEBUG("wxt plugin: Connection failed. errno=%d, msg=\"%s\"", errno, strerror(errno));
 		return -1;
 	} 
 
-	//Request data
-	const char request[] = "0R\r\n";
-	size_t request_size = strlen(request);
-	int rc = send(sock,request,request_size,0);
-	if (rc != request_size)
+	failed = 1;
+	size_t vars_size = DEFAULT_VARS_SIZE;
+	char **vars=malloc(sizeof(char*)*DEFAULT_VARS_SIZE);
+	char **vals=malloc(sizeof(char*)*DEFAULT_VARS_SIZE);
+	do
 	{
-		//Close connection
-		close(sock);
-		return -2;
-	}
-
-	//Receive response
-	//We expect precisely three lines (\r\n) of data
-	const size_t resp_buf_size = 1024;
-	size_t resp_buf_used = 0;
-	char resp_buf[resp_buf_size];
-	char *resp_buf_head = resp_buf;
-	char *line_starts[3] = { resp_buf,NULL,NULL };
-	size_t line_size[3]  = { 0,0,0 };
-	size_t **next_line_used = &line_size[0];
-	char *next_line_start = &line_starts[0];
-
-	while (1)
-	{
-		if (resp_buf_size<=resp_buf_used)
+		//Request data
+		#define WXT_COMMAND_COM_SETTINGS "0XU,M\r\n"
+		#define WXT_COMMAND_COM_SET_ASCII "0XU,M=P\r\n"
+		#define WXT_COMMAND_GET_WIND_DATA "0R1\r\n"
+		#define WXT_COMMAND_GET_THP_DATA  "0R2\r\n"
+		#define WXT_COMMAND_GET_RAIN_DATA "0R3\r\n"
+		#define WXT_RESP_COM_SET_ASCII_N_LINES 1
+		#define WXT_RESP_COM_SETTINGS_N_LINES 1
+		#define WXT_RESP_WIND_DATA_N_LINES 1
+		#define WXT_RESP_THP_DATA_N_LINES 1
+		#define WXT_RESP_RAIN_DATA_N_LINES 1
+		#define WXT_RESP_0R_N_LINES 3
+		if (wxt_process_split_command(sock,WXT_COMMAND_COM_SETTINGS,WXT_RESP_COM_SETTINGS_N_LINES,"0XU,",'=',',',&vars,&vals,&vars_size) != 0)
 		{
-			//TODO: Nicer error handling
-			//Close connection
-			close(sock);
-			return -3;
-
-		}
-		rc = recv(sock,resp_buf_head,resp_buf_size-resp_buf_used,0);
-		if (rc == -1)
-		{
-			//TODO: Nicer error handling
-			//Close connection
-			close(sock);
-			return -4;
-		} else if (rc == 0)
-		{
-			//Remote connection shutdown
 			break;
 		}
-		resp_buf_head += rc;
-		resp_buf_used  = resp_buf_head - resp_buf;
-		*next_line_used = resp_buf_head - next_line_start;
-		char *next_line_end = memchr(*next_line_start,'\r', *next_line_used);
-		if (next_line_end == NULL)
+
+		const char *wxt_protocol = wxt_pair_get(vars,vals,vars_size,"M");
+		if (wxt_protocol == NULL)
 		{
-			//No \n found
-			continue;
-		}
-		if ((next_line_end + 1 >= resp_buf_head) || (next_line_end[1] != '\n'))
-		{
-			//No \n\r found
-			continue;
-		}
-		next_line_used = next_line_end - next_line_start;
-		++next_line_used;
-		++next_line_start;
-		*next_line_start = next_line_end + 2;
-		if (next_line_used == line_size+(sizeof(line_size)/sizeof(line_size[0])))
-		{
-			//received all lines
+			ERROR("wxt plugin: Didn't receive protocol info");
 			break;
 		}
-	}
-	
+		if (strcmp(wxt_protocol,"P") != 0)
+		{
+			//FIXME: Automatically change protocol to "NMEA 0183 v3.0 query"
+			INFO("wxt plugin: Unexpected WXT protocol (M=%s). Changing to ASCII, polled (M=P)",wxt_protocol);
+			if (wxt_process_split_command(sock,WXT_COMMAND_COM_SET_ASCII,WXT_RESP_COM_SET_ASCII_N_LINES,"0XU,",'=',',',&vars,&vals,&vars_size) != 0)
+			{
+				break;
+			}
+		}
 
+		vars_size = DEFAULT_VARS_SIZE;
+		if (wxt_process_split_command(sock,WXT_COMMAND_GET_WIND_DATA,WXT_RESP_WIND_DATA_N_LINES,"0R1,",'=',',',&vars,&vals,&vars_size) != 0)
+		{
+			break;
+		}
+
+		vars_size = DEFAULT_VARS_SIZE;
+		if (wxt_process_split_command(sock,WXT_COMMAND_GET_THP_DATA,WXT_RESP_THP_DATA_N_LINES,"0R2,",'=',',',&vars,&vals,&vars_size) != 0)
+		{
+			break;
+		}
+
+		vars_size = DEFAULT_VARS_SIZE;
+		if (wxt_process_split_command(sock,WXT_COMMAND_GET_RAIN_DATA,WXT_RESP_RAIN_DATA_N_LINES,"0R3,",'=',',',&vars,&vals,&vars_size) != 0)
+		{
+			break;
+		}
+
+		failed = 0;
+	} while (0);
+
+	if (vars != NULL)
+	{
+		free(vars);
+	}
+	if (vals != NULL)
+	{
+		free(vals);
+	}
+	if (failed)
+	{
+	}
+#if 0
+	//Perform next request
+	memset(resp_buf,0,sizeof(resp_buf));
+	line_starts[0] = resp_buf;
+	line_size[0]   = 0;
+	wxt_process_command(sock,"0XU\r\n",resp_buf_size, WXT_RESP_0XU_N_LINES, line_starts, line_size);
+
+/* typical data:
+ * 0XU,A=0,M=Q,T=0,C=2,I=0,B=19200,D=8,P=N,S=1,L=20,N=WXT520,V=2.14\r\n
+ */
+	assert(line_size[0] != 0);
+	DEBUG("wxt plugin: Received all data");
+	DEBUG("wxt plugin: Line[0] = \"%s\" (size=%lu)", line_starts[0],line_size[0]);
+
+	//Skip header
+	#define WXT_RESP_0XU_HEADER0 "0XU,"
+	if ((line_size[0]>strlen(WXT_RESP_0XU_HEADER0)) && (memcmp(line_starts[0], WXT_RESP_0XU_HEADER0,strlen(WXT_RESP_0XU_HEADER0)) == 0))
+	{
+		line_starts[0] += strlen(WXT_RESP_0XU_HEADER0);
+	} else {
+		WARNING("wxt plugin: Line[0]: Missing header");
+	}
+
+	vars_size = VARS_SIZE;
+	wxt_split_varval(line_starts[0], line_size[0], '=', ',', vars, vals, &vars_size );
+	for (now_var = 0; now_var < vars_size; ++now_var)
+	{
+		DEBUG("wxt plugin: var[%d]: \"%s\" = \"%s\"", now_var, vars[now_var], vals[now_var]);
+	}
 	//Close connection
 	close(sock);
 
 	return (0);
+#endif
 #else
 	int     n;
 	char    recvline[1024];
@@ -628,6 +736,7 @@ static int wxt_config (const char *key, const char *value)
 	return (0);
 }
 
+/*
 static void value_submit_generic (char *p_value_type, char *p_value_type_instance, double p_value)
 {
 	assert(p_value_type);
@@ -673,7 +782,7 @@ static void value_submit (struct wxt_detail_s *p_wxt_detail)
 	value_submit_generic ("voltage",     "volt_heating",   p_wxt_detail->volt_heating);
 	value_submit_generic ("voltage",     "volt_reference", p_wxt_detail->volt_reference);
 }
-
+*/
 static int wxt_read (void)
 {
 	struct wxt_detail_s wxt_detail;
@@ -719,7 +828,7 @@ static int wxt_read (void)
 		return (-1);
 	}
 
-	value_submit (&wxt_detail);
+//	value_submit (&wxt_detail);
 
 	return (0);
 } /* wxt_read */
