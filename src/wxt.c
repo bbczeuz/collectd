@@ -261,15 +261,15 @@ static int wxt_process_command(int p_socket, const char *p_request, const size_t
 	}
 
 	//Receive response
-	size_t resp_buf_used = 0;
-	char *resp_buf_head = p_line_starts[0];
-	size_t *now_line_used = &p_line_size[0];
-	char **now_line_start = &p_line_starts[0];
+	size_t resp_buf_used   = 0;
+	char  *resp_buf_head   = p_line_starts[0];
+	size_t *now_line_used  = &p_line_size[0];
+	char  **now_line_start = &p_line_starts[0];
 
 	DEBUG("wxt plugin: Receiving response");
 	while (1)
 	{
-		if (p_resp_buf_size<=resp_buf_used)
+		if (p_resp_buf_size <= resp_buf_used)
 		{
 			ERROR("wxt plugin: Buffer too small to fit response (size: %lu, needed: %lu)", p_resp_buf_size, resp_buf_used);
 			return -3;
@@ -316,6 +316,7 @@ static int wxt_process_command(int p_socket, const char *p_request, const size_t
 					break;
 				} else {
 					//Move to next line
+					//FIXME: This code seems not to work correctly if there's just one line
 					++now_line_used;
 					++now_line_start;
 					*now_line_start = now_line_end + 2; //Move past \r\n
@@ -340,17 +341,18 @@ static int wxt_process_command(int p_socket, const char *p_request, const size_t
 static int wxt_process_split_command(int p_socket,const char *p_command, const size_t p_resp_n_lines, const char *p_line_header, const char p_var_term, const char p_val_term, char ***p_vars,char ***p_vals, size_t *p_vars_size)
 {
 	int i;
-	const size_t resp_buf_size = 1024;
+	const size_t resp_buf_size = 4096;
 	char *resp_buf = malloc(resp_buf_size);
 	memset(resp_buf,0,resp_buf_size);
 
 	char **line_starts = malloc(sizeof(char*  )*p_resp_n_lines);
 	size_t *line_size  = malloc(sizeof(size_t*)*p_resp_n_lines);
+	memset(line_starts,0,sizeof(char*)*p_resp_n_lines);
+	memset(line_size,  0,sizeof(size_t*)*p_resp_n_lines);
 
 	line_starts[0] = resp_buf;
-	memset(line_size,0,sizeof(size_t*)*p_resp_n_lines);
 
-	if (wxt_process_command(p_socket,p_command,resp_buf_size, p_resp_n_lines, line_starts, line_size) != 0)
+	if (wxt_process_command(p_socket, p_command, resp_buf_size, p_resp_n_lines, line_starts, line_size) != 0)
 	{
 		ERROR("wxt plugin:  wxt_process_command(p_socket,p_command,resp_buf_size, p_resp_n_lines, line_starts, line_size) failed");
 		free(line_size);
@@ -436,7 +438,6 @@ static char *wxt_pair_get(char **p_vars, char **p_vals, const size_t p_vars_size
 /* Get and print status from weather station */
 static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s *p_wxt_detail)
 {
-#if 1
 	assert(p_host);assert(p_port);
 
 	//Retry
@@ -479,13 +480,17 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 		#define WXT_COMMAND_GET_WIND_DATA "0R1\r\n"
 		#define WXT_COMMAND_GET_THP_DATA  "0R2\r\n"
 		#define WXT_COMMAND_GET_RAIN_DATA "0R3\r\n"
+		#define WXT_COMMAND_GET_OTHER_DATA "0R5\r\n"
 		#define WXT_RESP_COM_SET_ASCII_N_LINES 1
 		#define WXT_RESP_COM_SETTINGS_N_LINES 1
 		#define WXT_RESP_WIND_DATA_N_LINES 1
 		#define WXT_RESP_THP_DATA_N_LINES 1
 		#define WXT_RESP_RAIN_DATA_N_LINES 1
+		#define WXT_RESP_OTHER_DATA_N_LINES 1
 		#define WXT_RESP_0R_N_LINES 3
-		if (wxt_process_split_command(sock,WXT_COMMAND_COM_SETTINGS,WXT_RESP_COM_SETTINGS_N_LINES,"0XU,",'=',',',&vars,&vals,&vars_size) != 0)
+
+		//Check settings of WXT
+		if ((failed=wxt_process_split_command(sock,WXT_COMMAND_COM_SETTINGS,WXT_RESP_COM_SETTINGS_N_LINES,"0XU,",'=',',',&vars,&vals,&vars_size)) != 0)
 		{
 			break;
 		}
@@ -500,32 +505,127 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 		{
 			//FIXME: Automatically change protocol to "NMEA 0183 v3.0 query"
 			INFO("wxt plugin: Unexpected WXT protocol (M=%s). Changing to ASCII, polled (M=P)",wxt_protocol);
-			if (wxt_process_split_command(sock,WXT_COMMAND_COM_SET_ASCII,WXT_RESP_COM_SET_ASCII_N_LINES,"0XU,",'=',',',&vars,&vals,&vars_size) != 0)
+			if ((failed=wxt_process_split_command(sock,WXT_COMMAND_COM_SET_ASCII,WXT_RESP_COM_SET_ASCII_N_LINES,"0XU,",'=',',',&vars,&vals,&vars_size)) != 0)
 			{
 				break;
 			}
 		}
 
+		//Get wind data
 		vars_size = DEFAULT_VARS_SIZE;
-		if (wxt_process_split_command(sock,WXT_COMMAND_GET_WIND_DATA,WXT_RESP_WIND_DATA_N_LINES,"0R1,",'=',',',&vars,&vals,&vars_size) != 0)
+		if ((failed=wxt_process_split_command(sock,WXT_COMMAND_GET_WIND_DATA,WXT_RESP_WIND_DATA_N_LINES,"0R1,",'=',',',&vars,&vals,&vars_size)) != 0)
 		{
 			break;
 		}
 
-		vars_size = DEFAULT_VARS_SIZE;
-		if (wxt_process_split_command(sock,WXT_COMMAND_GET_THP_DATA,WXT_RESP_THP_DATA_N_LINES,"0R2,",'=',',',&vars,&vals,&vars_size) != 0)
+		const char *wxt_val;
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Dn")) != NULL)
 		{
-			break;
+        		p_wxt_detail->wind_dir_avg = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Dm")) != NULL)
+		{
+        		p_wxt_detail->wind_dir_min = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Dx")) != NULL)
+		{
+        		p_wxt_detail->wind_dir_max = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Sn")) != NULL)
+		{
+        		p_wxt_detail->wind_speed_avg = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Sm")) != NULL)
+		{
+        		p_wxt_detail->wind_speed_min = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Sx")) != NULL)
+		{
+        		p_wxt_detail->wind_speed_max = strtod(wxt_val,NULL);
 		}
 
+		//Get temperature/humidity/pressure data
 		vars_size = DEFAULT_VARS_SIZE;
-		if (wxt_process_split_command(sock,WXT_COMMAND_GET_RAIN_DATA,WXT_RESP_RAIN_DATA_N_LINES,"0R3,",'=',',',&vars,&vals,&vars_size) != 0)
+		if ((failed=wxt_process_split_command(sock,WXT_COMMAND_GET_THP_DATA,WXT_RESP_THP_DATA_N_LINES,"0R2,",'=',',',&vars,&vals,&vars_size)) != 0)
 		{
 			break;
 		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Ta")) != NULL)
+		{
+        		p_wxt_detail->temp_air = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Ua")) != NULL)
+		{
+        		p_wxt_detail->humi_air = strtod(wxt_val,NULL) /100; //Values received as a percentage
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Pa")) != NULL)
+		{
+        		p_wxt_detail->pres_air = strtod(wxt_val,NULL)*100; //Values received in hPa
+		}
+
+		//Get rain/hail data
+		vars_size = DEFAULT_VARS_SIZE;
+		if ((failed=wxt_process_split_command(sock,WXT_COMMAND_GET_RAIN_DATA,WXT_RESP_RAIN_DATA_N_LINES,"0R3,",'=',',',&vars,&vals,&vars_size)) != 0)
+		{
+			INFO("Error decoding WXT_RAIN data"); 
+			break;
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Rc")) != NULL)
+		{
+        		p_wxt_detail->rain_mm = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Rd")) != NULL)
+		{
+        		p_wxt_detail->rain_sec = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Ri")) != NULL)
+		{
+        		p_wxt_detail->rain_mmh = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Hc")) != NULL)
+		{
+        		p_wxt_detail->hail_mm = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Hd")) != NULL)
+		{
+        		p_wxt_detail->hail_sec = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Hi")) != NULL)
+		{
+        		p_wxt_detail->hail_hith = strtod(wxt_val,NULL);
+		}
+//FIXME: How to get double rain_peak_mmh
+//FIXME: How to get double hail_peak_hith;
+
+		//Get other
+		vars_size = DEFAULT_VARS_SIZE;
+		if ((failed=wxt_process_split_command(sock,WXT_COMMAND_GET_OTHER_DATA,WXT_RESP_OTHER_DATA_N_LINES,"0R5,",'=',',',&vars,&vals,&vars_size)) != 0)
+		{
+			INFO("Error decoding WXT_OTHER data"); 
+			break;
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Th")) != NULL)
+		{
+        		p_wxt_detail->temp_heating = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Vh")) != NULL)
+		{
+        		p_wxt_detail->volt_heating = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Vs")) != NULL)
+		{
+        		p_wxt_detail->volt_supply = strtod(wxt_val,NULL);
+		}
+		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Vr")) != NULL)
+		{
+        		p_wxt_detail->volt_reference = strtod(wxt_val,NULL);
+		}
+
 
 		failed = 0;
 	} while (0);
+
+	close(sock);
 
 	if (vars != NULL)
 	{
@@ -537,158 +637,8 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 	}
 	if (failed)
 	{
+		INFO("Failed to receive all data");
 	}
-#if 0
-	//Perform next request
-	memset(resp_buf,0,sizeof(resp_buf));
-	line_starts[0] = resp_buf;
-	line_size[0]   = 0;
-	wxt_process_command(sock,"0XU\r\n",resp_buf_size, WXT_RESP_0XU_N_LINES, line_starts, line_size);
-
-/* typical data:
- * 0XU,A=0,M=Q,T=0,C=2,I=0,B=19200,D=8,P=N,S=1,L=20,N=WXT520,V=2.14\r\n
- */
-	assert(line_size[0] != 0);
-	DEBUG("wxt plugin: Received all data");
-	DEBUG("wxt plugin: Line[0] = \"%s\" (size=%lu)", line_starts[0],line_size[0]);
-
-	//Skip header
-	#define WXT_RESP_0XU_HEADER0 "0XU,"
-	if ((line_size[0]>strlen(WXT_RESP_0XU_HEADER0)) && (memcmp(line_starts[0], WXT_RESP_0XU_HEADER0,strlen(WXT_RESP_0XU_HEADER0)) == 0))
-	{
-		line_starts[0] += strlen(WXT_RESP_0XU_HEADER0);
-	} else {
-		WARNING("wxt plugin: Line[0]: Missing header");
-	}
-
-	vars_size = VARS_SIZE;
-	wxt_split_varval(line_starts[0], line_size[0], '=', ',', vars, vals, &vars_size );
-	for (now_var = 0; now_var < vars_size; ++now_var)
-	{
-		DEBUG("wxt plugin: var[%d]: \"%s\" = \"%s\"", now_var, vars[now_var], vals[now_var]);
-	}
-	//Close connection
-	close(sock);
-
-	return (0);
-#endif
-#else
-	int     n;
-	char    recvline[1024];
-	char   *tokptr;
-	char   *toksaveptr;
-	char   *key;
-	double  value;
-	_Bool retry = 1;
-	int status;
-
-
-#if APCMAIN
-# define PRINT_VALUE(name, val) printf("  Found property: name = %s; value = %f;\n", name, val)
-#else
-# define PRINT_VALUE(name, val) /**/
-#endif
-
-	while (retry)
-	{
-		if (global_sockfd < 0)
-		{
-			global_sockfd = net_open (host, port);
-			if (global_sockfd < 0)
-			{
-				ERROR ("wxt plugin: Connecting to the " "wxtd failed.");
-				return (-1);
-			}
-		}
-
-
-		status = net_send (&global_sockfd, "status", strlen ("status"));
-		if (status != 0)
-		{
-			/* net_send is closing the socket on error. */
-			assert (global_sockfd < 0);
-			if (retry)
-			{
-				retry = 0;
-				count_retries++;
-				continue;
-			}
-
-			ERROR ("wxt plugin: Writing to the socket failed.");
-			return (-1);
-		}
-
-		break;
-	} /* while (retry) */
-
-        /* When collectd's collection interval is larger than wxtd's
-         * timeout, we would have to retry / re-connect each iteration. Try to
-         * detect this situation and shut down the socket gracefully in that
-         * case. Otherwise, keep the socket open to avoid overhead. */
-	count_iterations++;
-	if ((count_iterations == 10) && (count_retries > 2))
-	{
-		NOTICE ("wxt plugin: There have been %i retries in the "
-				"first %i iterations. Will close the socket "
-				"in future iterations.",
-				count_retries, count_iterations);
-		close_socket = 1;
-	}
-
-	while ((n = net_recv (&global_sockfd, recvline, sizeof (recvline) - 1)) > 0)
-	{
-		assert ((unsigned int)n < sizeof (recvline));
-		recvline[n] = '\0';
-#if APCMAIN
-		printf ("net_recv = `%s';\n", recvline);
-#endif /* if APCMAIN */
-
-		toksaveptr = NULL;
-		tokptr = strtok_r (recvline, " :\t", &toksaveptr);
-		while (tokptr != NULL)
-		{
-			key = tokptr;
-			if ((tokptr = strtok_r (NULL, " :\t", &toksaveptr)) == NULL)
-				continue;
-			value = atof (tokptr);
-
-			PRINT_VALUE (key, value);
-
-			if (strcmp ("LINEV", key) == 0)
-				p_wxt_detail->linev = value;
-			else if (strcmp ("BATTV", key) == 0)
-				p_wxt_detail->battv = value;
-			else if (strcmp ("ITEMP", key) == 0)
-				p_wxt_detail->itemp = value;
-			else if (strcmp ("LOADPCT", key) == 0)
-				p_wxt_detail->loadpct = value;
-			else if (strcmp ("BCHARGE", key) == 0)
-				p_wxt_detail->bcharge = value;
-			else if (strcmp ("OUTPUTV", key) == 0)
-				p_wxt_detail->outputv = value;
-			else if (strcmp ("LINEFREQ", key) == 0)
-				p_wxt_detail->linefreq = value;
-			else if (strcmp ("TIMELEFT", key) == 0)
-			{
-				p_wxt_detail->timeleft = value;
-			}
-
-			tokptr = strtok_r (NULL, ":", &toksaveptr);
-		} /* while (tokptr != NULL) */
-	}
-	status = errno; /* save errno, net_shutdown() may re-set it. */
-
-	if (close_socket)
-		net_shutdown (&global_sockfd);
-
-	if (n < 0)
-	{
-		char errbuf[1024];
-		ERROR ("wxt plugin: Reading from socket failed: %s",
-				sstrerror (status, errbuf, sizeof (errbuf)));
-		return (-1);
-	}
-#endif
 	return (0);
 }
 
@@ -736,7 +686,6 @@ static int wxt_config (const char *key, const char *value)
 	return (0);
 }
 
-/*
 static void value_submit_generic (char *p_value_type, char *p_value_type_instance, double p_value)
 {
 	assert(p_value_type);
@@ -782,15 +731,14 @@ static void value_submit (struct wxt_detail_s *p_wxt_detail)
 	value_submit_generic ("voltage",     "volt_heating",   p_wxt_detail->volt_heating);
 	value_submit_generic ("voltage",     "volt_reference", p_wxt_detail->volt_reference);
 }
-*/
+
 static int wxt_read (void)
 {
 	struct wxt_detail_s wxt_detail;
 	int status;
 
-	wxt_detail.temp_air = -1.0;
-	wxt_detail.temp_air = -1.0;
-	wxt_detail.temp_heating = -1.0;
+	wxt_detail.temp_air = -300.0;
+	wxt_detail.temp_heating = -300.0;
 	wxt_detail.humi_air = -1.0;
 	wxt_detail.pres_air = -1.0;
 	wxt_detail.rain_mm = -1.0;
@@ -801,14 +749,14 @@ static int wxt_read (void)
 	wxt_detail.hail_hith = -1.0;
 	wxt_detail.rain_peak_mmh = -1.0;
 	wxt_detail.hail_peak_hith = -1.0;
-	wxt_detail.wind_dir_min = -1.0;
-	wxt_detail.wind_dir_avg = -1.0;
-	wxt_detail.wind_dir_max = -1.0;
+	wxt_detail.wind_dir_min   = -1.0;
+	wxt_detail.wind_dir_avg   = -1.0;
+	wxt_detail.wind_dir_max   = -1.0;
 	wxt_detail.wind_speed_min = -1.0;
 	wxt_detail.wind_speed_avg = -1.0;
 	wxt_detail.wind_speed_max = -1.0;
-	wxt_detail.volt_supply = -1.0;
-	wxt_detail.volt_heating = -1.0;
+	wxt_detail.volt_supply    = -1.0;
+	wxt_detail.volt_heating   = -1.0;
 	wxt_detail.volt_reference = -1.0;
 
 	status = wxt_query(g_conf_host == NULL ? S2T_DEFAULT_HOST : g_conf_host,
@@ -828,7 +776,33 @@ static int wxt_read (void)
 		return (-1);
 	}
 
-//	value_submit (&wxt_detail);
+
+	INFO("Ta = %g degC, Th = %g degC, Ua = %g %%RHa, Ua = %g hPa, Vs = %g V, Vh = %g V, Vr = %g V\n", 
+		wxt_detail.temp_air, wxt_detail.temp_heating, wxt_detail.humi_air, wxt_detail.pres_air, wxt_detail.volt_supply, wxt_detail.volt_heating, wxt_detail.volt_reference
+	);
+	INFO("Rain: mm = %g, sec = %g, mmh = %g, peak = %g    Hail: mm = %g, sec = %g, hith = %g, peak = %g.\n",
+		wxt_detail.rain_mm, wxt_detail.rain_sec, wxt_detail.rain_mmh, wxt_detail.rain_peak_mmh, wxt_detail.hail_mm, wxt_detail.hail_sec, wxt_detail.hail_hith, wxt_detail.hail_peak_hith
+	);
+	INFO("Wind dir: last = %g, min = %g, max = %g    Wind speed: last = %g, min = %g, max = %g\n",
+		wxt_detail.wind_dir_avg, wxt_detail.wind_dir_min, wxt_detail.wind_dir_max, wxt_detail.wind_speed_avg, wxt_detail.wind_speed_min, wxt_detail.wind_speed_max
+	);
+/*
+	wxt_detail.rain_mm = -1.0;
+	wxt_detail.rain_sec = -1.0;
+	wxt_detail.rain_mmh = -1.0;
+	wxt_detail.hail_mm = -1.0;
+	wxt_detail.hail_sec = -1.0;
+	wxt_detail.hail_hith = -1.0;
+	wxt_detail.rain_peak_mmh = -1.0;
+	wxt_detail.hail_peak_hith = -1.0;
+	wxt_detail.wind_dir_min   = -1.0;
+	wxt_detail.wind_dir_avg   = -1.0;
+	wxt_detail.wind_dir_max   = -1.0;
+	wxt_detail.wind_speed_min = -1.0;
+	wxt_detail.wind_speed_avg = -1.0;
+	wxt_detail.wind_speed_max = -1.0;
+*/
+	value_submit (&wxt_detail);
 
 	return (0);
 } /* wxt_read */
