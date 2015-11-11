@@ -562,11 +562,11 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 		}
 		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Ua")) != NULL)
 		{
-        		p_wxt_detail->humi_air = strtod(wxt_val,NULL) /100; //Values received as a percentage
+        		p_wxt_detail->humi_air = strtod(wxt_val,NULL); //Values received as a percentage -> collectd expects percentage
 		}
 		if ((wxt_val = wxt_pair_get(vars,vals,vars_size,"Pa")) != NULL)
 		{
-        		p_wxt_detail->pres_air = strtod(wxt_val,NULL)*100; //Values received in hPa
+        		p_wxt_detail->pres_air = strtod(wxt_val,NULL)*100; //Values received in hPa -> collectd expects Pa
 		}
 
 		//Get rain/hail data
@@ -802,7 +802,7 @@ static int wxt_read (void)
 	}
 
 
-	INFO("Ta = %g degC, Th = %g degC, Ua = %g RHa, Ua = %g Pa, Vs = %g V, Vh = %g V, Vr = %g V\n", 
+	INFO("Ta = %g degC, Th = %g degC, Ua = %g %%RHa, Ua = %g Pa, Vs = %g V, Vh = %g V, Vr = %g V\n", 
 		wxt_detail.temp_air, wxt_detail.temp_heating, wxt_detail.humi_air, wxt_detail.pres_air, wxt_detail.volt_supply, wxt_detail.volt_heating, wxt_detail.volt_reference
 	);
 	INFO("Rain: mm = %g, sec = %g, mmh = %g, peak = %g    Hail: mm = %g, sec = %g, hith = %g, peak = %g.\n",

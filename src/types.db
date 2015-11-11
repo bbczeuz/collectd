@@ -194,7 +194,7 @@ smart_attribute         current:GAUGE:0:255, worst:GAUGE:0:255, threshold:GAUGE:
 snr			value:GAUGE:0:U
 spam_check		value:GAUGE:0:U
 spam_score		value:GAUGE:U:U
-speed                   value:GAUGE:0:U
+speed                   value:GAUGE:U:U
 spl			value:GAUGE:U:U
 swap_io			value:DERIVE:0:U
 swap			value:GAUGE:0:1099511627776
