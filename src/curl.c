@@ -327,7 +327,10 @@ static int cc_config_add_match (web_page_t *page, /* {{{ */
   } /* while (status == 0) */
 
   if (status != 0)
+  {
+    cc_web_match_free (match);
     return (status);
+  }
 
   match->match = match_create_simple (match->regex, match->exclude_regex,
       match->dstype);
@@ -415,8 +418,7 @@ static int cc_page_init_curl (web_page_t *wp) /* {{{ */
   if (wp->timeout >= 0)
     curl_easy_setopt (wp->curl, CURLOPT_TIMEOUT_MS, (long) wp->timeout);
   else
-    curl_easy_setopt (wp->curl, CURLOPT_TIMEOUT_MS,
-       CDTIME_T_TO_MS(plugin_get_interval()));
+    curl_easy_setopt (wp->curl, CURLOPT_TIMEOUT_MS, (long) CDTIME_T_TO_MS(plugin_get_interval()));
 #endif
 
   return (0);
