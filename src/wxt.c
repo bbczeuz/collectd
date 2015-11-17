@@ -516,6 +516,7 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 				break;
 			}
 		}
+		//TODO: Set Measurement units/variables: 0TU,0WU,0RU
 
 		//Get wind data
 		vars_size = DEFAULT_VARS_SIZE;
