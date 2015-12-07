@@ -82,14 +82,8 @@ struct wxt_detail_s
 /* Default values for contacting daemon */
 static char *g_conf_host = NULL;
 static char *g_conf_port = NULL;
-static int g_conf_timeout = 2;
-static int g_conf_retries = 3; //First try doesn't count
-
-//static int global_sockfd = -1;
-
-//static int count_retries = 0;
-//static int count_iterations = 0;
-//static _Bool close_socket = 0;
+static int   g_conf_timeout = 2;
+static int   g_conf_retries = 3; //First try doesn't count
 
 static const char *g_config_keys[] =
 {
@@ -101,21 +95,6 @@ static const char *g_config_keys[] =
 };
 static int g_config_keys_num = STATIC_ARRAY_SIZE (g_config_keys);
 
-#if 0
-static int net_shutdown (int *fd)
-{
-	uint16_t packet_size = 0;
-
-	if ((fd == NULL) || (*fd < 0))
-		return (EINVAL);
-
-	swrite (*fd, (void *) &packet_size, sizeof (packet_size));
-	close (*fd);
-	*fd = -1;
-
-	return (0);
-} /* int net_shutdown */
-#endif
 
 /* Close the network connection */
 static int wxt_shutdown (void)
@@ -134,163 +113,7 @@ static int wxt_shutdown (void)
 	return (0);
 } /* int wxt_shutdown */
 
-/*
- * Open a TCP connection to the UPS network server
- * Returns -1 on error
- * Returns socket file descriptor otherwise
- */
-#if 0
-static int net_open (char *host, int port)
-{
-	int              sd;
-	int              status;
-	char             port_str[8];
-	struct addrinfo  ai_hints;
-	struct addrinfo *ai_return;
-	struct addrinfo *ai_list;
-
-	assert ((port > 0x00000000) && (port <= 0x0000FFFF));
-
-	/* Convert the port to a string */
-	ssnprintf (port_str, sizeof (port_str), "%i", port);
-
-	/* Resolve name */
-	memset ((void *) &ai_hints, '\0', sizeof (ai_hints));
-	ai_hints.ai_family   = AF_INET; /* XXX: Change this to `AF_UNSPEC' if wxtd can handle IPv6 */
-	ai_hints.ai_socktype = SOCK_STREAM;
-
-	status = getaddrinfo (host, port_str, &ai_hints, &ai_return);
-	if (status != 0)
-	{
-		char errbuf[1024];
-		INFO ("getaddrinfo failed: %s",
-				(status == EAI_SYSTEM)
-				? sstrerror (errno, errbuf, sizeof (errbuf))
-				: gai_strerror (status));
-		return (-1);
-	}
-
-	/* Create socket */
-	sd = -1;
-	for (ai_list = ai_return; ai_list != NULL; ai_list = ai_list->ai_next)
-	{
-		sd = socket (ai_list->ai_family, ai_list->ai_socktype, ai_list->ai_protocol);
-		if (sd >= 0)
-			break;
-	}
-	/* `ai_list' still holds the current description of the socket.. */
-
-	if (sd < 0)
-	{
-		DEBUG ("Unable to open a socket");
-		freeaddrinfo (ai_return);
-		return (-1);
-	}
-
-	status = connect (sd, ai_list->ai_addr, ai_list->ai_addrlen);
-
-	freeaddrinfo (ai_return);
-
-	if (status != 0) /* `connect(2)' failed */
-	{
-		char errbuf[1024];
-		INFO ("connect failed: %s",
-				sstrerror (errno, errbuf, sizeof (errbuf)));
-		close (sd);
-		return (-1);
-	}
-
-	DEBUG ("Done opening a socket %i", sd);
-
-	return (sd);
-} /* int net_open (char *host, char *service, int port) */
-#endif
-
-/*
- * Receive a message from the other end. Each message consists of
- * two packets. The first is a header that contains the size
- * of the data that follows in the second packet.
- * Returns number of bytes read
- * Returns 0 on end of file
- * Returns -1 on hard end of file (i.e. network connection close)
- * Returns -2 on error
- */
-#if 0
-static int net_recv (int *sockfd, char *buf, int buflen)
-{
-	uint16_t packet_size;
-
-	/* get data size -- in short */
-	if (sread (*sockfd, (void *) &packet_size, sizeof (packet_size)) != 0)
-	{
-		close (*sockfd);
-		*sockfd = -1;
-		return (-1);
-	}
-
-	packet_size = ntohs (packet_size);
-	if (packet_size > buflen)
-	{
-		ERROR ("wxt plugin: Received %"PRIu16" bytes of payload "
-				"but have only %i bytes of buffer available.",
-				packet_size, buflen);
-		close (*sockfd);
-		*sockfd = -1;
-		return (-2);
-	}
-
-	if (packet_size == 0)
-		return (0);
-
-	/* now read the actual data */
-	if (sread (*sockfd, (void *) buf, packet_size) != 0)
-	{
-		close (*sockfd);
-		*sockfd = -1;
-		return (-1);
-	}
-
-	return ((int) packet_size);
-} /* static int net_recv (int *sockfd, char *buf, int buflen) */
-#endif
-
-/*
- * Send a message over the network. The send consists of
- * two network packets. The first is sends a short containing
- * the length of the data packet which follows.
- * Returns zero on success
- * Returns non-zero on error
- */
-#if 0
-static int net_send (int *p_sock, const char *p_buf, size_t p_buf_size)
-{
-	uint16_t packet_size;
-
-	assert (*p_sock >= 0);
-
-	/* send short containing size of data packet */
-	packet_size = htons ((uint16_t) p_buf_size);
-
-	if (swrite (*p_sock, (void *) &packet_size, sizeof (packet_size)) != 0)
-	{
-		close (*p_sock);
-		*p_sock = -1;
-		return (-1);
-	}
-
-	/* send data packet */
-	if (swrite (*p_sock, (void *) p_buf, p_buf_size) != 0)
-	{
-		close (*p_sock);
-		*p_sock = -1;
-		return (-2);
-	}
-
-	return (0);
-}
-#endif
-
-//Code based on from http://long.ccaba.upc.edu/long/045Guidelines/eva/ipv6.html
+//Code based on http://long.ccaba.upc.edu/long/045Guidelines/eva/ipv6.html
 int connect_client (const char *hostname,
                 const char *service,
                 int         family,
@@ -351,12 +174,11 @@ int connect_client (const char *hostname,
 /* Get and print status from weather station */
 static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s *p_wxt_detail)
 {
-#if 1
 	assert(p_host);assert(p_port);
-	//Retry
-	int now_try = 0;
-	int failed = 0;
-	int sock = -1;
+	//Try to connect to the weather station (and retry if needed)
+	int now_try =  0;
+	int failed  =  0;
+	int sock    = -1;
 	while (1)
 	{
 		//Resolve host, Open socket, Set timeout and connect to Serial2Tcp server
@@ -370,13 +192,13 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 			close(sock);
 			break;
 		}
-		if (++now_try>g_conf_retries)
+		if (++now_try > g_conf_retries)
 		{
 			failed = 1;
 			break;
 		}
 	}
-	if (failed)
+	if (failed != 0)
 	{
 		return -1;
 	} 
@@ -455,160 +277,44 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 	close(sock);
 
 	return (0);
-#else
-	int     n;
-	char    recvline[1024];
-	char   *tokptr;
-	char   *toksaveptr;
-	char   *key;
-	double  value;
-	_Bool retry = 1;
-	int status;
-
-
-#if APCMAIN
-# define PRINT_VALUE(name, val) printf("  Found property: name = %s; value = %f;\n", name, val)
-#else
-# define PRINT_VALUE(name, val) /**/
-#endif
-
-	while (retry)
-	{
-		if (global_sockfd < 0)
-		{
-			global_sockfd = net_open (host, port);
-			if (global_sockfd < 0)
-			{
-				ERROR ("wxt plugin: Connecting to the " "wxtd failed.");
-				return (-1);
-			}
-		}
-
-
-		status = net_send (&global_sockfd, "status", strlen ("status"));
-		if (status != 0)
-		{
-			/* net_send is closing the socket on error. */
-			assert (global_sockfd < 0);
-			if (retry)
-			{
-				retry = 0;
-				count_retries++;
-				continue;
-			}
-
-			ERROR ("wxt plugin: Writing to the socket failed.");
-			return (-1);
-		}
-
-		break;
-	} /* while (retry) */
-
-        /* When collectd's collection interval is larger than wxtd's
-         * timeout, we would have to retry / re-connect each iteration. Try to
-         * detect this situation and shut down the socket gracefully in that
-         * case. Otherwise, keep the socket open to avoid overhead. */
-	count_iterations++;
-	if ((count_iterations == 10) && (count_retries > 2))
-	{
-		NOTICE ("wxt plugin: There have been %i retries in the "
-				"first %i iterations. Will close the socket "
-				"in future iterations.",
-				count_retries, count_iterations);
-		close_socket = 1;
-	}
-
-	while ((n = net_recv (&global_sockfd, recvline, sizeof (recvline) - 1)) > 0)
-	{
-		assert ((unsigned int)n < sizeof (recvline));
-		recvline[n] = '\0';
-#if APCMAIN
-		printf ("net_recv = `%s';\n", recvline);
-#endif /* if APCMAIN */
-
-		toksaveptr = NULL;
-		tokptr = strtok_r (recvline, " :\t", &toksaveptr);
-		while (tokptr != NULL)
-		{
-			key = tokptr;
-			if ((tokptr = strtok_r (NULL, " :\t", &toksaveptr)) == NULL)
-				continue;
-			value = atof (tokptr);
-
-			PRINT_VALUE (key, value);
-
-			if (strcmp ("LINEV", key) == 0)
-				p_wxt_detail->linev = value;
-			else if (strcmp ("BATTV", key) == 0)
-				p_wxt_detail->battv = value;
-			else if (strcmp ("ITEMP", key) == 0)
-				p_wxt_detail->itemp = value;
-			else if (strcmp ("LOADPCT", key) == 0)
-				p_wxt_detail->loadpct = value;
-			else if (strcmp ("BCHARGE", key) == 0)
-				p_wxt_detail->bcharge = value;
-			else if (strcmp ("OUTPUTV", key) == 0)
-				p_wxt_detail->outputv = value;
-			else if (strcmp ("LINEFREQ", key) == 0)
-				p_wxt_detail->linefreq = value;
-			else if (strcmp ("TIMELEFT", key) == 0)
-			{
-				p_wxt_detail->timeleft = value;
-			}
-
-			tokptr = strtok_r (NULL, ":", &toksaveptr);
-		} /* while (tokptr != NULL) */
-	}
-	status = errno; /* save errno, net_shutdown() may re-set it. */
-
-	if (close_socket)
-		net_shutdown (&global_sockfd);
-
-	if (n < 0)
-	{
-		char errbuf[1024];
-		ERROR ("wxt plugin: Reading from socket failed: %s",
-				sstrerror (status, errbuf, sizeof (errbuf)));
-		return (-1);
-	}
-#endif
-	return (0);
 }
 
-static int wxt_config (const char *key, const char *value)
+static int wxt_config(const char *p_key, const char *p_value)
 {
-	if (strcasecmp (key, "host") == 0)
+	//Parse configuration p_key
+	//Returns 0 if OK, 1 if parameter error, -1 if key error
+	if (strcasecmp (p_key, "host") == 0)
 	{
 		if (g_conf_host != NULL)
 		{
 			free (g_conf_host);
 			g_conf_host = NULL;
 		}
-		if ((g_conf_host = strdup (value)) == NULL)
+		if ((g_conf_host = strdup (p_value)) == NULL)
 		{
 			return (1);
 		}
-	} else if (strcasecmp (key, "port") == 0)
+	} else if (strcasecmp (p_key, "port") == 0)
 	{
 		if (g_conf_port != NULL)
 		{
 			free (g_conf_port);
 			g_conf_port = NULL;
 		}
-		if ((g_conf_port = strdup (value)) == NULL)
+		if ((g_conf_port = strdup (p_value)) == NULL)
 		{
 			return (1);
 		}
-	} else if (strcasecmp (key, "timeout") == 0)
+	} else if (strcasecmp (p_key, "timeout") == 0)
 	{
-		g_conf_timeout = atoi(value);
+		g_conf_timeout = atoi(p_value);
 		if (g_conf_timeout <= 0)
 		{
 			return (1);
 		}
-	} else if (strcasecmp (key, "retries") == 0)
+	} else if (strcasecmp (p_key, "retries") == 0)
 	{
-		g_conf_retries = atoi(value);
+		g_conf_retries = atoi(p_value);
 		if (g_conf_retries <= 1)
 		{
 			return (1);
