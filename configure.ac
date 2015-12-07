@@ -5193,7 +5193,6 @@ plugin_virt="no"
 plugin_vmem="no"
 plugin_vserver="no"
 plugin_wireless="no"
-plugin_wxt="no"
 plugin_zfs_arc="no"
 plugin_zookeeper="no"
 
@@ -5228,7 +5227,6 @@ then
 	plugin_vmem="yes"
 	plugin_vserver="yes"
 	plugin_wireless="yes"
-	plugin_wxt="yes"
 	plugin_zfs_arc="yes"
 
 	if test "x$have_linux_ip_vs_h" = "xyes" || test "x$have_net_ip_vs_h" = "xyes" || test "x$have_ip_vs_h" = "xyes"
@@ -5657,7 +5655,7 @@ AC_PLUGIN([write_redis], [$with_libhiredis],    [Redis output plugin])
 AC_PLUGIN([write_riemann], [$have_protoc_c],   [Riemann output plugin])
 AC_PLUGIN([write_sensu], [yes],                [Sensu output plugin])
 AC_PLUGIN([write_tsdb],  [yes],                [TSDB output plugin])
-AC_PLUGIN([wxt],         [$plugin_wxt],        [Vaisila WXT weather station plugin])
+AC_PLUGIN([wxt],         [yes],                [Vaisila WXT weather station plugin])
 AC_PLUGIN([xmms],        [$with_libxmms],      [XMMS statistics])
 AC_PLUGIN([zfs_arc],     [$plugin_zfs_arc],    [ZFS ARC statistics])
 AC_PLUGIN([zookeeper],   [yes],  	       [Zookeeper statistics])
