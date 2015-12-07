@@ -15,7 +15,7 @@ cache_eviction		value:DERIVE:0:U
 cache_operation		value:DERIVE:0:U
 cache_ratio		value:GAUGE:0:100
 cache_result		value:DERIVE:0:U
-cache_size		value:GAUGE:0:U
+cache_size		value:GAUGE:0:1125899906842623
 ceph_bytes		value:GAUGE:U:U
 ceph_latency	value:GAUGE:U:U
 ceph_rate			value:DERIVE:0:U
@@ -194,7 +194,7 @@ smart_attribute         current:GAUGE:0:255, worst:GAUGE:0:255, threshold:GAUGE:
 snr			value:GAUGE:0:U
 spam_check		value:GAUGE:0:U
 spam_score		value:GAUGE:U:U
-speed                   value:GAUGE:0:U
+speed                   value:GAUGE:U:U
 spl			value:GAUGE:U:U
 swap_io			value:DERIVE:0:U
 swap			value:GAUGE:0:1099511627776

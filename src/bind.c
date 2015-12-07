@@ -763,7 +763,7 @@ static int bind_xml_stats_handle_zone (int version, xmlDoc *doc, /* {{{ */
   xmlFree (zone_name);
   zone_name = NULL;
 
-  if (j >= views->zones_num)
+  if (j >= view->zones_num)
     return (0);
 
   zone_name = view->zones[j];
@@ -1759,7 +1759,7 @@ static int bind_init (void) /* {{{ */
   curl_easy_setopt (curl, CURLOPT_MAXREDIRS, 50L);
 #ifdef HAVE_CURLOPT_TIMEOUT_MS
   curl_easy_setopt (curl, CURLOPT_TIMEOUT_MS, (timeout >= 0) ?
-      (long) timeout : CDTIME_T_TO_MS(plugin_get_interval()));
+      (long) timeout : (long) CDTIME_T_TO_MS(plugin_get_interval()));
 #endif
 
 
