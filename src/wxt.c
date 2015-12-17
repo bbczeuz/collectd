@@ -696,52 +696,55 @@ static int wxt_config (const char *key, const char *value)
 }
 
 
-static void value_submit_generic (char *p_value_type, char *p_value_type_instance, double p_value)
+static void value_submit_generic (char *p_value_type, char *p_value_type_instance, double p_value, double p_lower_limit)
 {
 	assert(p_value_type);
 	assert(p_value_type_instance);
 
-	value_t values[1];
-	value_list_t vl = VALUE_LIST_INIT;
+	if (p_value >= p_lower_limit)
+	{
+		value_t values[1];
+		value_list_t vl = VALUE_LIST_INIT;
 
-	values[0].gauge = p_value;
+		values[0].gauge = p_value;
 
-	vl.values     = values;
-	vl.values_len = 1;
+		vl.values     = values;
+		vl.values_len = 1;
 
-	sstrncpy (vl.host,            hostname_g,            sizeof (vl.host));
-	sstrncpy (vl.plugin,          MODULE_NAME,           sizeof (vl.plugin));
-	sstrncpy (vl.plugin_instance, g_conf_host_service,   sizeof (vl.plugin_instance));
-	sstrncpy (vl.type,            p_value_type,          sizeof (vl.type));
-	sstrncpy (vl.type_instance,   p_value_type_instance, sizeof (vl.type_instance));
+		sstrncpy (vl.host,            hostname_g,            sizeof (vl.host));
+		sstrncpy (vl.plugin,          MODULE_NAME,           sizeof (vl.plugin));
+		sstrncpy (vl.plugin_instance, g_conf_host_service,   sizeof (vl.plugin_instance));
+		sstrncpy (vl.type,            p_value_type,          sizeof (vl.type));
+		sstrncpy (vl.type_instance,   p_value_type_instance, sizeof (vl.type_instance));
 
-	plugin_dispatch_values (&vl);
+		plugin_dispatch_values (&vl);
+	}
 }
 
 
 static void value_submit (struct wxt_detail_s *p_wxt_detail)
 {
-	value_submit_generic ("temperature", "temp_air",            p_wxt_detail->temp_air);
-	value_submit_generic ("temperature", "temp_heating",        p_wxt_detail->temp_heating);
-	value_submit_generic ("humidity",    "humi_air",            p_wxt_detail->humi_air);
-	value_submit_generic ("pressure",    "pres_air",            p_wxt_detail->pres_air);
-	value_submit_generic ("gauge",       "rain_sum_mm",         p_wxt_detail->rain_sum_mm);
-	value_submit_generic ("gauge",       "rain_duration",       p_wxt_detail->rain_duration);
-	value_submit_generic ("gauge",       "rain_intensity",      p_wxt_detail->rain_intensity);
-	value_submit_generic ("gauge",       "rain_intensity_peak", p_wxt_detail->rain_intensity_peak);
-	value_submit_generic ("gauge",       "hail_sum_hit",        p_wxt_detail->hail_sum_hits);
-	value_submit_generic ("gauge",       "hail_duration",       p_wxt_detail->hail_duration);
-	value_submit_generic ("gauge",       "hail_intensity",      p_wxt_detail->hail_intensity);
-	value_submit_generic ("gauge",       "hail_intensity_peak", p_wxt_detail->hail_intensity_peak);
-	value_submit_generic ("angle",       "wind_dir_min",        p_wxt_detail->wind_dir_min);
-	value_submit_generic ("angle",       "wind_dir_avg",        p_wxt_detail->wind_dir_avg);
-	value_submit_generic ("angle",       "wind_dir_max",        p_wxt_detail->wind_dir_max);
-	value_submit_generic ("speed",       "wind_speed_min",      p_wxt_detail->wind_speed_min);
-	value_submit_generic ("speed",       "wind_speed_avg",      p_wxt_detail->wind_speed_avg);
-	value_submit_generic ("speed",       "wind_speed_max",      p_wxt_detail->wind_speed_max);
-	value_submit_generic ("voltage",     "volt_supply",         p_wxt_detail->volt_supply);
-	value_submit_generic ("voltage",     "volt_heating",        p_wxt_detail->volt_heating);
-	value_submit_generic ("voltage",     "volt_reference",      p_wxt_detail->volt_reference);
+	value_submit_generic ("temperature", "temp_air",               p_wxt_detail->temp_air,     -60);
+	value_submit_generic ("temperature", "temp_heating",           p_wxt_detail->temp_heating, -60);
+	value_submit_generic ("humidity",    "humi_air",               p_wxt_detail->humi_air,      1);
+	value_submit_generic ("pressure",    "pres_air",               p_wxt_detail->pres_air,      600);
+	value_submit_generic ("gaugepos",   "rain_sum_mm",             p_wxt_detail->rain_sum_mm,   0);
+	value_submit_generic ("gaugepos",       "rain_duration",       p_wxt_detail->rain_duration, 0);
+	value_submit_generic ("gaugepos",       "rain_intensity",      p_wxt_detail->rain_intensity,0);
+	value_submit_generic ("gaugepos",       "rain_intensity_peak", p_wxt_detail->rain_intensity_peak,0);
+	value_submit_generic ("gaugepos",       "hail_sum_hit",        p_wxt_detail->hail_sum_hits, 0);
+	value_submit_generic ("gaugepos",       "hail_duration",       p_wxt_detail->hail_duration, 0);
+	value_submit_generic ("gaugepos",       "hail_intensity",      p_wxt_detail->hail_intensity,0);
+	value_submit_generic ("gaugepos",       "hail_intensity_peak", p_wxt_detail->hail_intensity_peak,0);
+	value_submit_generic ("angle",       "wind_dir_min",           p_wxt_detail->wind_dir_min,  0);
+	value_submit_generic ("angle",       "wind_dir_avg",           p_wxt_detail->wind_dir_avg,  0);
+	value_submit_generic ("angle",       "wind_dir_max",           p_wxt_detail->wind_dir_max,  0);
+	value_submit_generic ("speedpos",       "wind_speed_min",      p_wxt_detail->wind_speed_min,0);
+	value_submit_generic ("speedpos",       "wind_speed_avg",      p_wxt_detail->wind_speed_avg,0);
+	value_submit_generic ("speedpos",       "wind_speed_max",      p_wxt_detail->wind_speed_max,0);
+	value_submit_generic ("voltage",     "volt_supply",            p_wxt_detail->volt_supply,   0);
+	value_submit_generic ("voltage",     "volt_heating",           p_wxt_detail->volt_heating,  0);
+	value_submit_generic ("voltage",     "volt_reference",         p_wxt_detail->volt_reference,0);
 }
 
 
