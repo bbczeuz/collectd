@@ -446,14 +446,28 @@ static const char *wxt_pair_get(char **p_vars, char **p_vals, const size_t p_var
 }
 
 
-static void wxt_store_var(char **p_vars, char **p_vals, const size_t p_vars_size, const char *p_searched_var, double *p_dest)
+static void wxt_store_var(char **p_vars, char **p_vals, const size_t p_vars_size, const char *p_searched_var, char p_unit_valid, double *p_dest)
 {
 	const char *wxt_val;
 	wxt_val = wxt_pair_get(p_vars, p_vals, p_vars_size, p_searched_var);
-	if ((wxt_val != NULL) && (wxt_val[0] != '#'))
+	if (wxt_val != NULL)
 	{
-		//If the variable exists and is valid, store it
-		*p_dest = strtod(wxt_val,NULL);
+		//The variable exists 
+		char *wxt_unit;
+		double val = strtod(wxt_val,&wxt_unit);
+		DEBUG(MODULE_NAME " plugin: Variable %s: Value = %g, Unit: '%s', expected: '%c'", p_searched_var, val, wxt_unit?wxt_unit:"NULL", p_unit_valid);
+		if ((p_unit_valid == 0) || ((wxt_unit != NULL) && (wxt_unit[0] == p_unit_valid)))
+		{
+			//If there is a unit check requested, only store the value if the unit is correct
+			*p_dest = val;
+		} else {
+			if (wxt_unit != NULL)
+			{
+				DEBUG(MODULE_NAME " plugin: Variable %s: Invalid unit '%c' (Expected: '%c')", p_searched_var, wxt_unit[0], p_unit_valid);
+			} else {
+				DEBUG(MODULE_NAME " plugin: Variable %s: Invalid unit (none) (Expected: '%c')", p_searched_var, p_unit_valid); 
+			}
+		}
 	}
 }
 
@@ -545,12 +559,12 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 		}
 
 		//Typical response: 0R1,Dn=236D,Dm=283D,Dx=031D,Sn=0.0M,Sm=1.0M,Sx=2.2M
-		wxt_store_var(vars,vals,vars_size, "Dn", &p_wxt_detail->wind_dir_min);
-		wxt_store_var(vars,vals,vars_size, "Dm", &p_wxt_detail->wind_dir_avg);
-		wxt_store_var(vars,vals,vars_size, "Dx", &p_wxt_detail->wind_dir_max);
-		wxt_store_var(vars,vals,vars_size, "Sn", &p_wxt_detail->wind_speed_min);
-		wxt_store_var(vars,vals,vars_size, "Sm", &p_wxt_detail->wind_speed_avg);
-		wxt_store_var(vars,vals,vars_size, "Sx", &p_wxt_detail->wind_speed_max);
+		wxt_store_var(vars,vals,vars_size, "Dn", 'D', &p_wxt_detail->wind_dir_min);
+		wxt_store_var(vars,vals,vars_size, "Dm", 'D', &p_wxt_detail->wind_dir_avg);
+		wxt_store_var(vars,vals,vars_size, "Dx", 'D', &p_wxt_detail->wind_dir_max);
+		wxt_store_var(vars,vals,vars_size, "Sn", 'M', &p_wxt_detail->wind_speed_min);
+		wxt_store_var(vars,vals,vars_size, "Sm", 'M', &p_wxt_detail->wind_speed_avg);
+		wxt_store_var(vars,vals,vars_size, "Sx", 'M', &p_wxt_detail->wind_speed_max);
 
 		//Get temperature/humidity/pressure data
 		vars_size = DEFAULT_VARS_SIZE;
@@ -560,9 +574,9 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 		}
 		
 		//Typical response: 0R2,Ta=23.6C,Ua=14.2P,Pa=1026.6H
-		wxt_store_var(vars,vals,vars_size, "Ta", &p_wxt_detail->temp_air);
-		wxt_store_var(vars,vals,vars_size, "Ua", &p_wxt_detail->humi_air); //Values received as a percentage -> collectd expects percentage
-		wxt_store_var(vars,vals,vars_size, "Pa", &p_wxt_detail->pres_air); //Values received in hPa -> collectd expects Pa
+		wxt_store_var(vars,vals,vars_size, "Ta", 'C', &p_wxt_detail->temp_air);
+		wxt_store_var(vars,vals,vars_size, "Ua", 'P', &p_wxt_detail->humi_air); //Values received as a percentage -> collectd expects percentage
+		wxt_store_var(vars,vals,vars_size, "Pa", 'H', &p_wxt_detail->pres_air); //Values received in hPa -> collectd expects Pa
 
 		//Get rain/hail data
 		vars_size = DEFAULT_VARS_SIZE;
@@ -572,14 +586,14 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 			break;
 		}
 		//Typical response: 0R3,Rc=0.0M,Rd=0s,Ri=0.0M,Hc=0.0M,Hd=0s,Hi=0.0M,Rp=0.0M,Hp=0.0M
-		wxt_store_var(vars,vals,vars_size, "Rc", &p_wxt_detail->rain_sum_mm);      //(mm)
-		wxt_store_var(vars,vals,vars_size, "Rd", &p_wxt_detail->rain_duration);    //(sec)
-		wxt_store_var(vars,vals,vars_size, "Ri", &p_wxt_detail->rain_intensity);   //(mm/h)
-		wxt_store_var(vars,vals,vars_size, "Rp", &p_wxt_detail->rain_intensity_peak); //(mm/h)
-		wxt_store_var(vars,vals,vars_size, "Hc", &p_wxt_detail->hail_sum_hits);    //(hits/cm2)
-		wxt_store_var(vars,vals,vars_size, "Hd", &p_wxt_detail->hail_duration);    //(sec)
-		wxt_store_var(vars,vals,vars_size, "Hi", &p_wxt_detail->hail_intensity);   //(hits/cm2/h)
-		wxt_store_var(vars,vals,vars_size, "Hp", &p_wxt_detail->hail_intensity_peak); //(hits/cm2/h)
+		wxt_store_var(vars,vals,vars_size, "Rc", 'M', &p_wxt_detail->rain_sum_mm);      //(mm)
+		wxt_store_var(vars,vals,vars_size, "Rd", 's', &p_wxt_detail->rain_duration);    //(sec)
+		wxt_store_var(vars,vals,vars_size, "Ri", 'M', &p_wxt_detail->rain_intensity);   //(mm/h)
+		wxt_store_var(vars,vals,vars_size, "Rp", 'M', &p_wxt_detail->rain_intensity_peak); //(mm/h)
+		wxt_store_var(vars,vals,vars_size, "Hc", 'M', &p_wxt_detail->hail_sum_hits);    //(hits/cm2)
+		wxt_store_var(vars,vals,vars_size, "Hd", 's', &p_wxt_detail->hail_duration);    //(sec)
+		wxt_store_var(vars,vals,vars_size, "Hi", 'M', &p_wxt_detail->hail_intensity);   //(hits/cm2/h)
+		wxt_store_var(vars,vals,vars_size, "Hp", 'M', &p_wxt_detail->hail_intensity_peak); //(hits/cm2/h)
 
 		//Get other data
 		vars_size = DEFAULT_VARS_SIZE;
@@ -589,10 +603,11 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 			break;
 		}
 		//Typical response: 0R5,Th=25.9C,Vh=12.0N,Vs=15.2V,Vr=3.475V,Id=HEL___
-		wxt_store_var(vars,vals,vars_size, "Th", &p_wxt_detail->temp_heating);   //(degC)
-		wxt_store_var(vars,vals,vars_size, "Vh", &p_wxt_detail->volt_heating);   //(Volt)
-		wxt_store_var(vars,vals,vars_size, "Vs", &p_wxt_detail->volt_supply);    //(Volt)
-		wxt_store_var(vars,vals,vars_size, "Vr", &p_wxt_detail->volt_reference); //(Volt)
+		p_wxt_detail->volt_heating = 0;
+		wxt_store_var(vars,vals,vars_size, "Th", 'C', &p_wxt_detail->temp_heating);   //(degC)
+		wxt_store_var(vars,vals,vars_size, "Vh", 'V', &p_wxt_detail->volt_heating);   //(Volt) Unit 'N' = off
+		wxt_store_var(vars,vals,vars_size, "Vs", 'V', &p_wxt_detail->volt_supply);    //(Volt)
+		wxt_store_var(vars,vals,vars_size, "Vr", 'V', &p_wxt_detail->volt_reference); //(Volt)
 
 		failed = 0;
 	} while (0);
@@ -775,13 +790,13 @@ static int wxt_read (void)
 	}
 
 
-	INFO("Ta = %g degC, Th = %g degC, Ua = %g %%RHa, Ua = %g Pa, Vs = %g V, Vh = %g V, Vr = %g V\n", 
+	INFO("Ta = %g degC, Th = %g degC, Ua = %g %%RH, Ua = %g hPa, Vs = %g V, Vh = %g V, Vr = %g V", 
 		wxt_detail.temp_air, wxt_detail.temp_heating, wxt_detail.humi_air, wxt_detail.pres_air, wxt_detail.volt_supply, wxt_detail.volt_heating, wxt_detail.volt_reference
 	);
-	INFO("Rain: mm = %g, sec = %g, mmh = %g, peak = %g    Hail: mm = %g, sec = %g, hith = %g, peak = %g.\n",
+	INFO("Rain: sum = %g mm, sec = %g s, mmh = %g mm/h, peak = %g mm/h    Hail: sum = %g hits/cm2, sec = %g s, hith = %g hits/cm2/h, peak = %g hits/cm2/h",
 		wxt_detail.rain_sum_mm, wxt_detail.rain_duration, wxt_detail.rain_intensity, wxt_detail.rain_intensity_peak, wxt_detail.hail_sum_hits, wxt_detail.hail_duration, wxt_detail.hail_intensity, wxt_detail.hail_intensity_peak
 	);
-	INFO("Wind dir: last = %g, min = %g, max = %g    Wind speed: last = %g, min = %g, max = %g\n",
+	INFO("Wind dir: last = %g deg, min = %g deg, max = %g deg    Wind speed: last = %g m/s, min = %g m/s, max = %g m/s",
 		wxt_detail.wind_dir_avg, wxt_detail.wind_dir_min, wxt_detail.wind_dir_max, wxt_detail.wind_speed_avg, wxt_detail.wind_speed_min, wxt_detail.wind_speed_max
 	);
 
