@@ -1,5 +1,5 @@
 absolute		value:ABSOLUTE:0:U
-angle                   value:GAUGE:0:360
+angle			value:GAUGE:0:360
 apache_bytes		value:DERIVE:0:U
 apache_connections	value:GAUGE:0:65535
 apache_idle_workers	value:GAUGE:0:65535
@@ -78,7 +78,7 @@ frequency_offset	value:GAUGE:-1000000:1000000
 frequency		value:GAUGE:0:U
 fscache_stat		value:DERIVE:0:U
 gauge			value:GAUGE:U:U
-gauge_pos               value:GAUGE:0:U
+gaugepos		value:GAUGE:0:U
 hash_collisions		value:DERIVE:0:U
 http_request_methods	value:DERIVE:0:U
 http_requests		value:DERIVE:0:U
@@ -195,8 +195,8 @@ smart_attribute         current:GAUGE:0:255, worst:GAUGE:0:255, threshold:GAUGE:
 snr			value:GAUGE:0:U
 spam_check		value:GAUGE:0:U
 spam_score		value:GAUGE:U:U
-speed                   value:GAUGE:U:U
-speed_pos               value:GAUGE:0:U
+speed			value:GAUGE:U:U
+speedpos		value:GAUGE:0:U
 spl			value:GAUGE:U:U
 swap_io			value:DERIVE:0:U
 swap			value:GAUGE:0:1099511627776
