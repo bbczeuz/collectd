@@ -387,6 +387,7 @@ static int do_loop (void)
 
 static int do_shutdown (void)
 {
+	DEBUG("do_shutdown");
 	plugin_shutdown_all ();
 	return (0);
 } /* int do_shutdown */

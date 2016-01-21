@@ -1020,21 +1020,30 @@ cdtime_t cf_get_default_interval (void)
 
 void cf_unregister (const char *type)
 {
-	cf_callback_t *this, *prev;
-
-	for (prev = NULL, this = first_callback;
-			this != NULL;
-			prev = this, this = this->next)
-		if (strcasecmp (this->type, type) == 0)
+	/* Search for config callback of plugin 'type' and free it if found */
+	WARNING ("Unregistring cf for plugin \"%s\".", type);
+	cf_callback_t *prev_callback = NULL;
+	cf_callback_t *now_callback = first_callback;
+	while (now_callback != NULL)
+	{
+		if (strcasecmp (now_callback->type, type) == 0)
 		{
-			if (prev == NULL)
-				first_callback = this->next;
-			else
-				prev->next = this->next;
-
-			free (this);
-			break;
+			/* Found callback */
+			if (prev_callback == NULL)
+			{
+				/*first in list*/
+				first_callback = now_callback->next;
+			} else {
+				prev_callback->next = now_callback->next;
+			}
+			cf_callback_t *freed_callback = now_callback;
+			now_callback = now_callback->next;
+			free(freed_callback);
+			continue;
 		}
+		prev_callback = now_callback;
+		now_callback = now_callback->next;
+	}
 } /* void cf_unregister */
 
 void cf_unregister_complex (const char *type)
@@ -1056,6 +1065,30 @@ void cf_unregister_complex (const char *type)
 			break;
 		}
 } /* void cf_unregister */
+
+void cf_destroy_callbacks()
+{
+	WARNING ("Destroying config callbacks");
+	{
+		cf_callback_t *now_callback = first_callback;
+		while (now_callback != NULL)
+		{
+			cf_callback_t *freed_callback = now_callback;
+			now_callback = now_callback->next;
+			free(freed_callback);
+		}
+	}
+	{
+		cf_complex_callback_t *now_callback = complex_callback_head;
+		while (now_callback != NULL)
+		{
+			cf_complex_callback_t *freed_callback = now_callback;
+			now_callback = now_callback->next;
+			free(freed_callback->type);
+			free(freed_callback);
+		}
+	}
+}
 
 void cf_register (const char *type,
 		int (*callback) (const char *, const char *),

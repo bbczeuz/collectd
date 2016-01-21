@@ -138,4 +138,6 @@ int cf_util_get_service (const oconfig_item_t *ci, char **ret_string);
 
 int cf_util_get_cdtime (const oconfig_item_t *ci, cdtime_t *ret_value);
 
+void cf_destroy_callbacks();
+
 #endif /* defined(CONFIGFILE_H) */

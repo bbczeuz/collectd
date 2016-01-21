@@ -418,9 +418,9 @@ static int plugin_unregister (llist_t *list, const char *name) /* {{{ */
  * object, but it will bitch about a shared object not having a
  * ``module_register'' symbol..
  */
-static int plugin_load_file (char *file, uint32_t flags)
+static int plugin_load_file (char *file, uint32_t flags, lt_dlhandle *dlh)
 {
-	lt_dlhandle dlh;
+//	lt_dlhandle dlh;
 	void (*reg_handle) (void);
 
 	lt_dlinit ();
@@ -431,19 +431,19 @@ static int plugin_load_file (char *file, uint32_t flags)
 		lt_dladvise advise;
 		lt_dladvise_init(&advise);
 		lt_dladvise_global(&advise);
-		dlh = lt_dlopenadvise(file, advise);
+		*dlh = lt_dlopenadvise(file, advise);
 		lt_dladvise_destroy(&advise);
 	} else {
-		dlh = lt_dlopen (file);
+		*dlh = lt_dlopen (file);
 	}
 #else /* if LIBTOOL_VERSION == 1 */
 	if (flags & PLUGIN_FLAGS_GLOBAL)
 		WARNING ("plugin_load_file: The global flag is not supported, "
 				"libtool 2 is required for this.");
-	dlh = lt_dlopen (file);
+	*dlh = lt_dlopen (file);
 #endif
 
-	if (dlh == NULL)
+	if (*dlh == NULL)
 	{
 		char errbuf[1024] = "";
 
@@ -464,11 +464,11 @@ static int plugin_load_file (char *file, uint32_t flags)
 		return (1);
 	}
 
-	if ((reg_handle = (void (*) (void)) lt_dlsym (dlh, "module_register")) == NULL)
+	if ((reg_handle = (void (*) (void)) lt_dlsym (*dlh, "module_register")) == NULL)
 	{
 		WARNING ("Couldn't find symbol \"module_register\" in \"%s\": %s\n",
 				file, lt_dlerror ());
-		lt_dlclose (dlh);
+		lt_dlclose (*dlh);
 		return (-1);
 	}
 
@@ -984,7 +984,7 @@ static _Bool plugin_is_loaded (char const *name)
 	return (status == 0);
 }
 
-static int plugin_mark_loaded (char const *name)
+static int plugin_mark_loaded (char const *name, lt_dlhandle handle)
 {
 	char *name_copy;
 	int status;
@@ -993,8 +993,9 @@ static int plugin_mark_loaded (char const *name)
 	if (name_copy == NULL)
 		return (ENOMEM);
 
+	DEBUG("Inserting plugin %s, handle = %p", name_copy, handle);
 	status = c_avl_insert (plugins_loaded,
-			/* key = */ name_copy, /* value = */ NULL);
+			/* key = */ name_copy, /* value = */ handle);
 	return (status);
 }
 
@@ -1008,8 +1009,18 @@ static void plugin_free_loaded ()
 
 	while (c_avl_pick (plugins_loaded, &key, &value) == 0)
 	{
+		if (key == NULL)
+		{
+			DEBUG("Freeing plugin NULL, handle = %p", value);
+		} else {
+			DEBUG("Freeing plugin %s, handle = %p", (const char*)key, value);
+		}
 		sfree (key);
-		assert (value == NULL);
+		if (value != NULL)
+		{
+			lt_dlclose (value);
+		}
+		//assert (value == NULL);
 	}
 
 	c_avl_destroy (plugins_loaded);
@@ -1101,11 +1112,12 @@ int plugin_load (char const *plugin_name, uint32_t flags)
 			continue;
 		}
 
-		status = plugin_load_file (filename, flags);
+		lt_dlhandle handle;
+		status = plugin_load_file (filename, flags, &handle);
 		if (status == 0)
 		{
 			/* success */
-			plugin_mark_loaded (plugin_name);
+			plugin_mark_loaded (plugin_name, handle);
 			ret = 0;
 			INFO ("plugin_load: plugin \"%s\" successfully loaded.", plugin_name);
 			break;
@@ -1979,6 +1991,7 @@ int plugin_flush (const char *plugin, cdtime_t timeout, const char *identifier)
 
 void plugin_shutdown_all (void)
 {
+	DEBUG("plugin_shutdown_all");
 	llentry_t *le;
 
 	stop_read_threads ();
@@ -2035,6 +2048,7 @@ void plugin_shutdown_all (void)
 	destroy_all_callbacks (&list_notification);
 	destroy_all_callbacks (&list_shutdown);
 	destroy_all_callbacks (&list_log);
+	cf_destroy_callbacks();
 
 	plugin_free_loaded ();
 	plugin_free_data_sets ();
