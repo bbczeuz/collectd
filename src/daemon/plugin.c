@@ -2052,6 +2052,8 @@ void plugin_shutdown_all (void)
 
 	plugin_free_loaded ();
 	plugin_free_data_sets ();
+
+	uc_deinit ();
 } /* void plugin_shutdown_all */
 
 int plugin_dispatch_missing (const value_list_t *vl) /* {{{ */

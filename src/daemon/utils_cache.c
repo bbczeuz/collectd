@@ -232,6 +232,30 @@ int uc_init (void)
   return (0);
 } /* int uc_init */
 
+int uc_deinit (void)
+{
+  if (cache_tree != NULL)
+  {
+#if 0
+    /* CMZ: Disabled as this never frees any lost mem. NOT sure if this
+     * correct */
+    void *key;
+    void *value;
+    while (c_avl_pick (cache_tree, &key, &value) == 0)
+    {
+      sfree(key);
+      if (value != NULL)
+      {
+	cache_free(value);
+      }
+    }
+#endif
+    c_avl_destroy (cache_tree);
+  }
+
+  return (0);
+} /* int uc_deinit */
+
 int uc_check_timeout (void)
 {
   cdtime_t now;
