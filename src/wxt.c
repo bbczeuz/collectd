@@ -197,10 +197,11 @@ static int connect_client (const char *hostname,
 static int wxt_split_varval(char *p_line, size_t p_line_size, const char p_var_term, const char p_val_term, char **p_vars, char **p_vals, size_t *p_vars_size )
 {
 	assert(p_line);
+	assert(p_line_size);
 	assert(p_vars);
 	assert(p_vals);
-	assert(p_vars_size);
-	assert(p_line_size);
+	assert( p_vars_size);
+	assert(*p_vars_size);
 
 	p_vars[0] = p_line;
 	char **now_var = p_vars;
@@ -264,7 +265,7 @@ static int wxt_process_command(int p_socket, const char *p_request, const size_t
 	if (rc != request_size)
 	{
 		//Close connection
-		DEBUG(MODULE_NAME " plugin: Error sending request. errno=%d, msg=\"%s\"", errno, strerror(errno));
+		ERROR(MODULE_NAME " plugin: Error sending request. errno=%d, msg=\"%s\"", errno, strerror(errno));
 		return -2;
 	}
 
@@ -347,26 +348,65 @@ static int wxt_process_command(int p_socket, const char *p_request, const size_t
 }
 
 
-static int wxt_process_split_command(int p_socket,const char *p_command, const size_t p_resp_n_lines, const char *p_line_header, const char p_var_term, const char p_val_term, char ***p_vars,char ***p_vals, size_t *p_vars_size)
+static int wxt_process_split_command(int p_socket,const char *p_command, const size_t p_resp_n_lines, const char *p_line_header, const char p_var_term, const char p_val_term, char **p_packet_buffer, size_t *p_packet_buffer_size, char ***p_vars,char ***p_vals, size_t *p_vars_size)
 {
+	//Performs request to WXT520
+	//- Sends request p_command to p_socket
+	//- Receives precisely p_resp_n_lines starting with p_line_header
+	//- If p_vars/p_vals point to NULL, it allocates mem
+	//- Splits tags using p_var_term
+	//- Splits tag keys/values using p_val_term
+	//- p_vars: Array to tag keys
+	//- p_vals: Array to tag values
+
+	assert(p_socket >= 0);
+	assert(p_command);
+	assert(p_resp_n_lines > 0);
+	assert(p_line_header);
+	assert(p_packet_buffer);
+	assert(p_packet_buffer_size);
+	assert(*p_packet_buffer_size);
+	assert(p_vars);
+	assert(p_vals);
+	assert(p_vars_size);
+
+	//Allocate packet/line/size buffers
 	int i;
-	const size_t resp_buf_size = 4096;
-	char *resp_buf = malloc(resp_buf_size);
-	memset(resp_buf,0,resp_buf_size);
-
-	char **line_starts = malloc(sizeof(char*  )*p_resp_n_lines);
-	size_t *line_size  = malloc(sizeof(size_t*)*p_resp_n_lines);
-	memset(line_starts,0,sizeof(char*)*p_resp_n_lines);
-	memset(line_size,  0,sizeof(size_t*)*p_resp_n_lines);
-
-	line_starts[0] = resp_buf;
-
-	if (wxt_process_command(p_socket, p_command, resp_buf_size, p_resp_n_lines, line_starts, line_size) != 0)
+	if (*p_packet_buffer == NULL)
 	{
-		ERROR(MODULE_NAME " plugin:  wxt_process_command(p_socket,p_command,resp_buf_size, p_resp_n_lines, line_starts, line_size) failed");
-		free(line_size);
+		*p_packet_buffer_size = 4096;
+		*p_packet_buffer      = malloc(*p_packet_buffer_size);
+		if (*p_packet_buffer == NULL)
+		{
+			ERROR(MODULE_NAME " plugin: malloc(%zu) for resp_buf failed)", *p_packet_buffer_size); 
+			return 1;
+		}
+	}
+	char **line_starts = malloc(sizeof(char* )*p_resp_n_lines); //Array of pointers to the first char per line
+	if (line_starts == NULL)
+	{
+		ERROR(MODULE_NAME " plugin: malloc(%zu) for line_starts failed)", sizeof(char* )*p_resp_n_lines); 
+		return 1;
+	}
+	size_t *line_sizes = malloc(sizeof(size_t)*p_resp_n_lines); //Array of line sizes
+	if (line_sizes == NULL)
+	{
+		ERROR(MODULE_NAME " plugin: malloc(%zu) for line_sizes failed)",sizeof(size_t)*p_resp_n_lines); 
 		free(line_starts);
-		free(resp_buf);
+		return 1;
+	}
+	memset(*p_packet_buffer, 0, *p_packet_buffer_size);
+	memset(line_starts,      0, sizeof(char*  )*p_resp_n_lines);
+	memset(line_sizes,       0, sizeof(size_t*)*p_resp_n_lines);
+
+	line_starts[0] = *p_packet_buffer;
+
+	//Send command, receive response
+	if (wxt_process_command(p_socket, p_command, *p_packet_buffer_size, p_resp_n_lines, line_starts, line_sizes) != 0)
+	{
+		ERROR(MODULE_NAME " plugin:  wxt_process_command(p_socket,p_command,*p_packet_buffer_size, p_resp_n_lines, line_starts, line_size) failed");
+		free(line_sizes);
+		free(line_starts);
 		return 1;
 	}
 
@@ -379,14 +419,14 @@ static int wxt_process_split_command(int p_socket,const char *p_command, const s
 	DEBUG(MODULE_NAME " plugin: Received all data");
 	for (i=0; i<p_resp_n_lines; ++i)
 	{
-		DEBUG(MODULE_NAME " plugin: Line[%d] = \"%s\" (size=%lu)", i,line_starts[i],line_size[i]);
+		DEBUG(MODULE_NAME " plugin: Line[%d] = \"%s\" (size=%lu)", i,line_starts[i],line_sizes[i]);
 	}
 	
 	//Skip header
-	if ((line_size[0]>strlen(p_line_header)) && (memcmp(line_starts[0], p_line_header,strlen(p_line_header)) == 0))
+	if ((line_sizes[0]>strlen(p_line_header)) && (memcmp(line_starts[0], p_line_header,strlen(p_line_header)) == 0))
 	{
 		line_starts[0] += strlen(p_line_header);
-		line_size[0]   -= strlen(p_line_header); 
+		line_sizes[0]  -= strlen(p_line_header); 
 	} else {
 		WARNING(MODULE_NAME " plugin: Line[0]: Missing header");
 	}
@@ -395,12 +435,26 @@ static int wxt_process_split_command(int p_socket,const char *p_command, const s
 	size_t vars_size;
 	char **vars;
 	char **vals;
-	assert(p_vars_size);
 	if (*p_vars_size == 0)
 	{
 		vars_size = DEFAULT_VARS_SIZE;
 		vars = malloc(sizeof(char*)*vars_size);		
+		if (vars == NULL)
+		{
+			ERROR(MODULE_NAME " plugin: malloc(%zu) for vars failed", sizeof(char*)*vars_size); 
+			free(line_starts);
+			free(line_sizes);
+			return 1;
+		}
 		vals = malloc(sizeof(char*)*vars_size);		
+		if (vals == NULL)
+		{
+			ERROR(MODULE_NAME " plugin: malloc(%zu) for varl failed", sizeof(char*)*vars_size); 
+			free(vars);
+			free(line_starts);
+			free(line_sizes);
+			return 1;
+		}
 		*p_vars = vars;
 		*p_vals = vals;
 	} else {
@@ -410,8 +464,9 @@ static int wxt_process_split_command(int p_socket,const char *p_command, const s
 		vals = *p_vals;
 		vars_size = *p_vars_size;
 	}
+
 	DEBUG(MODULE_NAME " plugin: Splitting into up to %lu var/val pairs", vars_size);
-	wxt_split_varval(line_starts[0], line_size[0], p_var_term, p_val_term, vars, vals, &vars_size );
+	wxt_split_varval(line_starts[0], line_sizes[0], p_var_term, p_val_term, vars, vals, &vars_size );
 
 	int now_var;
 	for (now_var = 0; now_var < vars_size; ++now_var)
@@ -421,7 +476,7 @@ static int wxt_process_split_command(int p_socket,const char *p_command, const s
 	*p_vars_size = vars_size;
 	
 	free(line_starts);
-	free(line_size);
+	free(line_sizes);
 	return 0;
 }
 
@@ -475,7 +530,9 @@ static void wxt_store_var(char **p_vars, char **p_vals, const size_t p_vars_size
 /* Get and print status from weather station */
 static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s *p_wxt_detail)
 {
-	assert(p_host);assert(p_port);
+	assert(p_host);
+	assert(p_port);
+	assert(p_wxt_detail);
 
 	//Retry
 	int now_try = 0;
@@ -502,13 +559,29 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 	if (failed)
 	{
 		DEBUG(MODULE_NAME " plugin: Connection failed. errno=%d, msg=\"%s\"", errno, strerror(errno));
-		return -1;
+		return 1;
 	} 
 
-	failed = 1;
-	size_t vars_size = DEFAULT_VARS_SIZE;
+	size_t vars_size          = DEFAULT_VARS_SIZE;
+	size_t packet_buffer_size = 4096;
+	char *packet_buffer=malloc(packet_buffer_size);
 	char **vars=malloc(sizeof(char*)*DEFAULT_VARS_SIZE);
 	char **vals=malloc(sizeof(char*)*DEFAULT_VARS_SIZE);
+	if (packet_buffer == NULL)
+	{
+		ERROR(MODULE_NAME " plugin: malloc(%zu) for packet_buffer failed)", packet_buffer_size);
+		return 1;
+	}
+	if (vars == NULL)
+	{
+		ERROR(MODULE_NAME " plugin: malloc(%zu) for vars failed)", sizeof(char*)*DEFAULT_VARS_SIZE);
+		return 1;
+	}
+	if (vals == NULL)
+	{
+		ERROR(MODULE_NAME " plugin: malloc(%zu) for vals failed)", sizeof(char*)*DEFAULT_VARS_SIZE);
+		return 1;
+	}
 	do
 	{
 		//Request data
@@ -529,7 +602,8 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 
 		//Check settings of WXT
 		if ((failed=wxt_process_split_command(sock, WXT_COMMAND_COM_SETTINGS, WXT_RESP_COM_SETTINGS_N_LINES, 
-						WXT_TAG_COM_SETTINGS ",",'=',',',&vars,&vals,&vars_size)) != 0)
+						WXT_TAG_COM_SETTINGS ",",'=',',',&packet_buffer, &packet_buffer_size,
+					       	&vars,&vals,&vars_size)) != 0)
 		{
 			break;
 		}
@@ -545,7 +619,8 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 			//FIXME: Automatically change protocol to "NMEA 0183 v3.0 query"
 			INFO(MODULE_NAME " plugin: Unexpected WXT protocol (M=%s). Changing to ASCII, polled (M=P)",wxt_protocol);
 			if ((failed=wxt_process_split_command(sock,WXT_COMMAND_COM_SET_ASCII,WXT_RESP_COM_SET_ASCII_N_LINES,
-						WXT_TAG_COM_SETTINGS ",",'=',',',&vars,&vals,&vars_size)) != 0)
+						WXT_TAG_COM_SETTINGS ",",'=',',',&packet_buffer, &packet_buffer_size,
+						&vars,&vals,&vars_size)) != 0)
 			{
 				break;
 			}
@@ -553,7 +628,8 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 
 		//Get wind data
 		vars_size = DEFAULT_VARS_SIZE;
-		if ((failed=wxt_process_split_command(sock,WXT_COMMAND_GET_WIND_DATA,WXT_RESP_WIND_DATA_N_LINES,"0R1,",'=',',',&vars,&vals,&vars_size)) != 0)
+		if ((failed=wxt_process_split_command(sock,WXT_COMMAND_GET_WIND_DATA,WXT_RESP_WIND_DATA_N_LINES,
+						"0R1,",'=',',',&packet_buffer, &packet_buffer_size, &vars,&vals,&vars_size)) != 0)
 		{
 			break;
 		}
@@ -568,7 +644,9 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 
 		//Get temperature/humidity/pressure data
 		vars_size = DEFAULT_VARS_SIZE;
-		if ((failed=wxt_process_split_command(sock,WXT_COMMAND_GET_THP_DATA,WXT_RESP_THP_DATA_N_LINES,"0R2,",'=',',',&vars,&vals,&vars_size)) != 0)
+		if ((failed=wxt_process_split_command(sock,WXT_COMMAND_GET_THP_DATA,WXT_RESP_THP_DATA_N_LINES,
+						"0R2,",'=',',',&packet_buffer, &packet_buffer_size,
+						&vars,&vals,&vars_size)) != 0)
 		{
 			break;
 		}
@@ -580,7 +658,9 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 
 		//Get rain/hail data
 		vars_size = DEFAULT_VARS_SIZE;
-		if ((failed=wxt_process_split_command(sock,WXT_COMMAND_GET_RAIN_DATA,WXT_RESP_RAIN_DATA_N_LINES,"0R3,",'=',',',&vars,&vals,&vars_size)) != 0)
+		if ((failed=wxt_process_split_command(sock,WXT_COMMAND_GET_RAIN_DATA,WXT_RESP_RAIN_DATA_N_LINES,
+						"0R3,",'=',',',&packet_buffer, &packet_buffer_size,
+						&vars,&vals,&vars_size)) != 0)
 		{
 			INFO("Error decoding WXT_RAIN data"); 
 			break;
@@ -597,7 +677,9 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 
 		//Get other data
 		vars_size = DEFAULT_VARS_SIZE;
-		if ((failed=wxt_process_split_command(sock,WXT_COMMAND_GET_OTHER_DATA,WXT_RESP_OTHER_DATA_N_LINES,"0R5,",'=',',',&vars,&vals,&vars_size)) != 0)
+		if ((failed=wxt_process_split_command(sock,WXT_COMMAND_GET_OTHER_DATA,WXT_RESP_OTHER_DATA_N_LINES,
+						"0R5,",'=',',',&packet_buffer, &packet_buffer_size,
+						&vars,&vals,&vars_size)) != 0)
 		{
 			INFO("Error decoding WXT_OTHER data"); 
 			break;
@@ -621,6 +703,10 @@ static int wxt_query(const char *p_host, const char *p_port, struct wxt_detail_s
 	if (vals != NULL)
 	{
 		free(vals);
+	}
+	if (packet_buffer != NULL)
+	{
+		free(packet_buffer);
 	}
 	if (failed)
 	{
@@ -690,7 +776,6 @@ static int wxt_config (const char *key, const char *value)
 			return 1;
 		}
 		snprintf(g_conf_host_service,host_service_size,"%s-%s", g_conf_host, g_conf_port);
-		host_port_updated=1;	
 	}
 	return 0;
 }
