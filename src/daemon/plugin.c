@@ -141,6 +141,8 @@ static _Bool           record_statistics = 0;
  */
 static int plugin_dispatch_values_internal (value_list_t *vl);
 
+//static void plugin_destroy_ctx (void);
+
 static const char *plugin_get_dir (void)
 {
 	if (plugindir == NULL)
@@ -314,7 +316,7 @@ static int register_callback (llist_t **list, /* {{{ */
 } /* }}} int register_callback */
 
 static void log_list_callbacks (llist_t **list, /* {{{ */
-				const char *comment)
+		const char *comment)
 {
 	char *str;
 	int len;
@@ -335,14 +337,14 @@ static void log_list_callbacks (llist_t **list, /* {{{ */
 	if (keys == NULL)
 	{
 		ERROR("%s: failed to allocate memory for list of callbacks",
-		      comment);
+				comment);
 
 		return;
 	}
 
 	for (le = llist_head (*list), i = 0, len = 0;
-	     le != NULL;
-	     le = le->next, i++)
+			le != NULL;
+			le = le->next, i++)
 	{
 		keys[i] = le->key;
 		len += strlen(le->key) + 6;
@@ -351,7 +353,7 @@ static void log_list_callbacks (llist_t **list, /* {{{ */
 	if (str == NULL)
 	{
 		ERROR("%s: failed to allocate memory for list of callbacks",
-		      comment);
+				comment);
 	}
 	else
 	{
@@ -420,7 +422,7 @@ static int plugin_unregister (llist_t *list, const char *name) /* {{{ */
  */
 static int plugin_load_file (char *file, uint32_t flags, lt_dlhandle *dlh)
 {
-//	lt_dlhandle dlh;
+	//	lt_dlhandle dlh;
 	void (*reg_handle) (void);
 
 	lt_dlinit ();
@@ -464,7 +466,7 @@ static int plugin_load_file (char *file, uint32_t flags, lt_dlhandle *dlh)
 		return (1);
 	}
 
-	WARNING ("plugin_load_file: Successfully Loaded plugin %s", file);
+	DEBUG("plugin_load_file: Successfully Loaded plugin %s", file);
 
 	if ((reg_handle = (void (*) (void)) lt_dlsym (*dlh, "module_register")) == NULL)
 	{
@@ -502,7 +504,7 @@ static void *plugin_read_thread (void __attribute__((unused)) *args)
 		if (rf == NULL)
 		{
 			pthread_cond_wait (&read_cond, &read_lock);
-                        pthread_mutex_unlock (&read_lock);
+			pthread_mutex_unlock (&read_lock);
 			continue;
 		}
 		pthread_mutex_unlock (&read_lock);
@@ -535,7 +537,7 @@ static void *plugin_read_thread (void __attribute__((unused)) *args)
 			CDTIME_T_TO_TIMESPEC (rf->rf_next_read, &ts);
 
 			rc = pthread_cond_timedwait (&read_cond, &read_lock,
-				&ts);
+					&ts);
 		}
 
 		/* Must hold `read_lock' when accessing `rf->rf_type'. */
@@ -617,10 +619,10 @@ static void *plugin_read_thread (void __attribute__((unused)) *args)
 
 		if (elapsed > rf->rf_effective_interval)
 			WARNING ("plugin_read_thread: read-function of the `%s' plugin took %.3f "
-				"seconds, which is above its read interval (%.3f seconds). You might "
-				"want to adjust the `Interval' or `ReadThreads' settings.",
-				rf->rf_name, CDTIME_T_TO_DOUBLE(elapsed),
-				CDTIME_T_TO_DOUBLE(rf->rf_effective_interval));
+					"seconds, which is above its read interval (%.3f seconds). You might "
+					"want to adjust the `Interval' or `ReadThreads' settings.",
+					rf->rf_name, CDTIME_T_TO_DOUBLE(elapsed),
+					CDTIME_T_TO_DOUBLE(rf->rf_effective_interval));
 
 		DEBUG ("plugin_read_thread: read-function of the `%s' plugin took "
 				"%.6f seconds.",
@@ -652,6 +654,7 @@ static void *plugin_read_thread (void __attribute__((unused)) *args)
 		c_heap_insert (read_heap, rf);
 	} /* while (read_loop) */
 
+	DEBUG("Read thread exit...");
 	pthread_exit (NULL);
 	return ((void *) 0);
 } /* void *plugin_read_thread */
@@ -843,7 +846,7 @@ static value_list_t *plugin_write_dequeue (void) /* {{{ */
 	if (write_queue_head == NULL) {
 		write_queue_tail = NULL;
 		assert(0 == write_queue_length);
-		}
+	}
 
 	pthread_mutex_unlock (&write_lock);
 
@@ -1111,7 +1114,7 @@ int plugin_load (char const *plugin_name, uint32_t flags)
 		{
 			/* don't follow symlinks */
 			WARNING ("plugin_load: %s is not a regular file.",
-				       	filename);
+					filename);
 			continue;
 		}
 
@@ -1386,7 +1389,7 @@ int plugin_register_flush (const char *name,
 	plugin_ctx_t ctx = plugin_get_ctx ();
 
 	status = create_register_callback (&list_flush, name,
-		(void *) callback, ud);
+			(void *) callback, ud);
 	if (status != 0)
 		return status;
 
@@ -1422,11 +1425,11 @@ int plugin_register_flush (const char *name,
 		ud.free_func = plugin_flush_timeout_callback_free;
 
 		status = plugin_register_complex_read (
-			/* group     = */ "flush",
-			/* name      = */ flush_name,
-			/* callback  = */ plugin_flush_timeout_callback,
-			/* interval  = */ ctx.flush_interval,
-			/* user data = */ &ud);
+				/* group     = */ "flush",
+				/* name      = */ flush_name,
+				/* callback  = */ plugin_flush_timeout_callback,
+				/* interval  = */ ctx.flush_interval,
+				/* user data = */ &ud);
 
 		sfree (flush_name);
 		if (status != 0)
@@ -1466,6 +1469,7 @@ static void plugin_free_data_sets (void)
 	{
 		data_set_t *ds = value;
 		/* key is a pointer to ds->type */
+		DEBUG("Freeing data_sets: %s", (const char*)key);
 
 		sfree (ds->ds);
 		sfree (ds);
@@ -1879,117 +1883,117 @@ int plugin_read_all_once (void)
 int plugin_write (const char *plugin, /* {{{ */
 		const data_set_t *ds, const value_list_t *vl)
 {
-  llentry_t *le;
-  int status;
+	llentry_t *le;
+	int status;
 
-  if (vl == NULL)
-    return (EINVAL);
+	if (vl == NULL)
+		return (EINVAL);
 
-  if (list_write == NULL)
-    return (ENOENT);
+	if (list_write == NULL)
+		return (ENOENT);
 
-  if (ds == NULL)
-  {
-    ds = plugin_get_ds (vl->type);
-    if (ds == NULL)
-    {
-      ERROR ("plugin_write: Unable to lookup type `%s'.", vl->type);
-      return (ENOENT);
-    }
-  }
+	if (ds == NULL)
+	{
+		ds = plugin_get_ds (vl->type);
+		if (ds == NULL)
+		{
+			ERROR ("plugin_write: Unable to lookup type `%s'.", vl->type);
+			return (ENOENT);
+		}
+	}
 
-  if (plugin == NULL)
-  {
-    int success = 0;
-    int failure = 0;
+	if (plugin == NULL)
+	{
+		int success = 0;
+		int failure = 0;
 
-    le = llist_head (list_write);
-    while (le != NULL)
-    {
-      callback_func_t *cf = le->value;
-      plugin_write_cb callback;
+		le = llist_head (list_write);
+		while (le != NULL)
+		{
+			callback_func_t *cf = le->value;
+			plugin_write_cb callback;
 
-      /* do not switch plugin context; rather keep the context (interval)
-       * information of the calling read plugin */
+			/* do not switch plugin context; rather keep the context (interval)
+			 * information of the calling read plugin */
 
-      DEBUG ("plugin: plugin_write: Writing values via %s.", le->key);
-      callback = cf->cf_callback;
-      status = (*callback) (ds, vl, &cf->cf_udata);
-      if (status != 0)
-        failure++;
-      else
-        success++;
+			DEBUG ("plugin: plugin_write: Writing values via %s.", le->key);
+			callback = cf->cf_callback;
+			status = (*callback) (ds, vl, &cf->cf_udata);
+			if (status != 0)
+				failure++;
+			else
+				success++;
 
-      le = le->next;
-    }
+			le = le->next;
+		}
 
-    if ((success == 0) && (failure != 0))
-      status = -1;
-    else
-      status = 0;
-  }
-  else /* plugin != NULL */
-  {
-    callback_func_t *cf;
-    plugin_write_cb callback;
+		if ((success == 0) && (failure != 0))
+			status = -1;
+		else
+			status = 0;
+	}
+	else /* plugin != NULL */
+	{
+		callback_func_t *cf;
+		plugin_write_cb callback;
 
-    le = llist_head (list_write);
-    while (le != NULL)
-    {
-      if (strcasecmp (plugin, le->key) == 0)
-        break;
+		le = llist_head (list_write);
+		while (le != NULL)
+		{
+			if (strcasecmp (plugin, le->key) == 0)
+				break;
 
-      le = le->next;
-    }
+			le = le->next;
+		}
 
-    if (le == NULL)
-      return (ENOENT);
+		if (le == NULL)
+			return (ENOENT);
 
-    cf = le->value;
+		cf = le->value;
 
-    /* do not switch plugin context; rather keep the context (interval)
-     * information of the calling read plugin */
+		/* do not switch plugin context; rather keep the context (interval)
+		 * information of the calling read plugin */
 
-    DEBUG ("plugin: plugin_write: Writing values via %s.", le->key);
-    callback = cf->cf_callback;
-    status = (*callback) (ds, vl, &cf->cf_udata);
-  }
+		DEBUG ("plugin: plugin_write: Writing values via %s.", le->key);
+		callback = cf->cf_callback;
+		status = (*callback) (ds, vl, &cf->cf_udata);
+	}
 
-  return (status);
+	return (status);
 } /* }}} int plugin_write */
 
 int plugin_flush (const char *plugin, cdtime_t timeout, const char *identifier)
 {
-  llentry_t *le;
+	llentry_t *le;
 
-  if (list_flush == NULL)
-    return (0);
+	if (list_flush == NULL)
+		return (0);
 
-  le = llist_head (list_flush);
-  while (le != NULL)
-  {
-    callback_func_t *cf;
-    plugin_flush_cb callback;
-    plugin_ctx_t old_ctx;
+	le = llist_head (list_flush);
+	while (le != NULL)
+	{
+		callback_func_t *cf;
+		plugin_flush_cb callback;
+		plugin_ctx_t old_ctx;
 
-    if ((plugin != NULL)
-        && (strcmp (plugin, le->key) != 0))
-    {
-      le = le->next;
-      continue;
-    }
+		if ((plugin != NULL)
+				&& (strcmp (plugin, le->key) != 0))
+		{
+			le = le->next;
+			continue;
+		}
 
-    cf = le->value;
-    old_ctx = plugin_set_ctx (cf->cf_ctx);
-    callback = cf->cf_callback;
+		cf = le->value;
+		old_ctx = plugin_set_ctx (cf->cf_ctx);
+		callback = cf->cf_callback;
 
-    (*callback) (timeout, identifier, &cf->cf_udata);
+		(*callback) (timeout, identifier, &cf->cf_udata);
 
-    plugin_set_ctx (old_ctx);
+		plugin_set_ctx (old_ctx);
 
-    le = le->next;
-  }
-  return (0);
+		le = le->next;
+	}
+	return (0);
 } /* int plugin_flush */
 
 void plugin_shutdown_all (void)
@@ -2034,8 +2038,12 @@ void plugin_shutdown_all (void)
 
 		(*callback) ();
 
+//		plugin_ctx_destructor (cf->cf_ctx)
+
 		plugin_set_ctx (old_ctx);
 	}
+
+	//plugin_destroy_ctx();
 
 	stop_write_threads ();
 
@@ -2053,8 +2061,9 @@ void plugin_shutdown_all (void)
 	destroy_all_callbacks (&list_log);
 	cf_destroy_callbacks();
 
-        /* Unload libs loaded via libtool */
-        int rc;
+
+	/* Unload libs loaded via libtool */
+	int rc;
 	while ((rc = lt_dlexit()) == 0)
 	{
 		;
@@ -2068,43 +2077,43 @@ void plugin_shutdown_all (void)
 
 int plugin_dispatch_missing (const value_list_t *vl) /* {{{ */
 {
-  llentry_t *le;
+	llentry_t *le;
 
-  if (list_missing == NULL)
-    return (0);
+	if (list_missing == NULL)
+		return (0);
 
-  le = llist_head (list_missing);
-  while (le != NULL)
-  {
-    callback_func_t *cf;
-    plugin_missing_cb callback;
-    plugin_ctx_t old_ctx;
-    int status;
+	le = llist_head (list_missing);
+	while (le != NULL)
+	{
+		callback_func_t *cf;
+		plugin_missing_cb callback;
+		plugin_ctx_t old_ctx;
+		int status;
 
-    cf = le->value;
-    old_ctx = plugin_set_ctx (cf->cf_ctx);
-    callback = cf->cf_callback;
+		cf = le->value;
+		old_ctx = plugin_set_ctx (cf->cf_ctx);
+		callback = cf->cf_callback;
 
-    status = (*callback) (vl, &cf->cf_udata);
-    plugin_set_ctx (old_ctx);
-    if (status != 0)
-    {
-      if (status < 0)
-      {
-        ERROR ("plugin_dispatch_missing: Callback function \"%s\" "
-            "failed with status %i.",
-            le->key, status);
-        return (status);
-      }
-      else
-      {
-        return (0);
-      }
-    }
+		status = (*callback) (vl, &cf->cf_udata);
+		plugin_set_ctx (old_ctx);
+		if (status != 0)
+		{
+			if (status < 0)
+			{
+				ERROR ("plugin_dispatch_missing: Callback function \"%s\" "
+						"failed with status %i.",
+						le->key, status);
+				return (status);
+			}
+			else
+			{
+				return (0);
+			}
+		}
 
-    le = le->next;
-  }
-  return (0);
+		le = le->next;
+	}
+	return (0);
 } /* int }}} plugin_dispatch_missing */
 
 static int plugin_dispatch_values_internal (value_list_t *vl)
@@ -2374,7 +2383,7 @@ int plugin_dispatch_values (value_list_t const *vl)
 	return (0);
 }
 
-__attribute__((sentinel))
+	__attribute__((sentinel))
 int plugin_dispatch_multivalue (value_list_t const *template, /* {{{ */
 		_Bool store_percentage, int store_type, ...)
 {
@@ -2385,7 +2394,7 @@ int plugin_dispatch_multivalue (value_list_t const *template, /* {{{ */
 
 	assert (template->values_len == 1);
 
-  /* Calculate sum for Gauge to calculate percent if needed */
+	/* Calculate sum for Gauge to calculate percent if needed */
 	if (DS_TYPE_GAUGE == store_type)	{
 		va_start (ap, store_type);
 		while (42)
@@ -2425,23 +2434,23 @@ int plugin_dispatch_multivalue (value_list_t const *template, /* {{{ */
 		/* Set the value. */
 		switch (store_type)
 		{
-		case DS_TYPE_GAUGE:
-			vl->values[0].gauge = va_arg (ap, gauge_t);
-			if (store_percentage)
-				vl->values[0].gauge *= 100.0 / sum;
-			break;
-		case DS_TYPE_ABSOLUTE:
-			vl->values[0].absolute = va_arg (ap, absolute_t);
-			break;
-		case DS_TYPE_COUNTER:
-			vl->values[0].counter  = va_arg (ap, counter_t);
-			break;
-		case DS_TYPE_DERIVE:
-			vl->values[0].derive   = va_arg (ap, derive_t);
-			break;
-		default:
-			ERROR ("plugin_dispatch_multivalue: given store_type is incorrect.");
-			failed++;
+			case DS_TYPE_GAUGE:
+				vl->values[0].gauge = va_arg (ap, gauge_t);
+				if (store_percentage)
+					vl->values[0].gauge *= 100.0 / sum;
+				break;
+			case DS_TYPE_ABSOLUTE:
+				vl->values[0].absolute = va_arg (ap, absolute_t);
+				break;
+			case DS_TYPE_COUNTER:
+				vl->values[0].counter  = va_arg (ap, counter_t);
+				break;
+			case DS_TYPE_DERIVE:
+				vl->values[0].derive   = va_arg (ap, derive_t);
+				break;
+			default:
+				ERROR ("plugin_dispatch_multivalue: given store_type is incorrect.");
+				failed++;
 		}
 
 
@@ -2593,186 +2602,187 @@ const data_set_t *plugin_get_ds (const char *name)
 } /* data_set_t *plugin_get_ds */
 
 static int plugin_notification_meta_add (notification_t *n,
-    const char *name,
-    enum notification_meta_type_e type,
-    const void *value)
+		const char *name,
+		enum notification_meta_type_e type,
+		const void *value)
 {
-  notification_meta_t *meta;
-  notification_meta_t *tail;
+	notification_meta_t *meta;
+	notification_meta_t *tail;
 
-  if ((n == NULL) || (name == NULL) || (value == NULL))
-  {
-    ERROR ("plugin_notification_meta_add: A pointer is NULL!");
-    return (-1);
-  }
+	if ((n == NULL) || (name == NULL) || (value == NULL))
+	{
+		ERROR ("plugin_notification_meta_add: A pointer is NULL!");
+		return (-1);
+	}
 
-  meta = (notification_meta_t *) malloc (sizeof (notification_meta_t));
-  if (meta == NULL)
-  {
-    ERROR ("plugin_notification_meta_add: malloc failed.");
-    return (-1);
-  }
-  memset (meta, 0, sizeof (notification_meta_t));
+	meta = (notification_meta_t *) malloc (sizeof (notification_meta_t));
+	if (meta == NULL)
+	{
+		ERROR ("plugin_notification_meta_add: malloc failed.");
+		return (-1);
+	}
+	memset (meta, 0, sizeof (notification_meta_t));
 
-  sstrncpy (meta->name, name, sizeof (meta->name));
-  meta->type = type;
+	sstrncpy (meta->name, name, sizeof (meta->name));
+	meta->type = type;
 
-  switch (type)
-  {
-    case NM_TYPE_STRING:
-    {
-      meta->nm_value.nm_string = strdup ((const char *) value);
-      if (meta->nm_value.nm_string == NULL)
-      {
-        ERROR ("plugin_notification_meta_add: strdup failed.");
-        sfree (meta);
-        return (-1);
-      }
-      break;
-    }
-    case NM_TYPE_SIGNED_INT:
-    {
-      meta->nm_value.nm_signed_int = *((int64_t *) value);
-      break;
-    }
-    case NM_TYPE_UNSIGNED_INT:
-    {
-      meta->nm_value.nm_unsigned_int = *((uint64_t *) value);
-      break;
-    }
-    case NM_TYPE_DOUBLE:
-    {
-      meta->nm_value.nm_double = *((double *) value);
-      break;
-    }
-    case NM_TYPE_BOOLEAN:
-    {
-      meta->nm_value.nm_boolean = *((_Bool *) value);
-      break;
-    }
-    default:
-    {
-      ERROR ("plugin_notification_meta_add: Unknown type: %i", type);
-      sfree (meta);
-      return (-1);
-    }
-  } /* switch (type) */
+	switch (type)
+	{
+		case NM_TYPE_STRING:
+			{
+				meta->nm_value.nm_string = strdup ((const char *) value);
+				if (meta->nm_value.nm_string == NULL)
+				{
+					ERROR ("plugin_notification_meta_add: strdup failed.");
+					sfree (meta);
+					return (-1);
+				}
+				break;
+			}
+		case NM_TYPE_SIGNED_INT:
+			{
+				meta->nm_value.nm_signed_int = *((int64_t *) value);
+				break;
+			}
+		case NM_TYPE_UNSIGNED_INT:
+			{
+				meta->nm_value.nm_unsigned_int = *((uint64_t *) value);
+				break;
+			}
+		case NM_TYPE_DOUBLE:
+			{
+				meta->nm_value.nm_double = *((double *) value);
+				break;
+			}
+		case NM_TYPE_BOOLEAN:
+			{
+				meta->nm_value.nm_boolean = *((_Bool *) value);
+				break;
+			}
+		default:
+			{
+				ERROR ("plugin_notification_meta_add: Unknown type: %i", type);
+				sfree (meta);
+				return (-1);
+			}
+	} /* switch (type) */
 
-  meta->next = NULL;
-  tail = n->meta;
-  while ((tail != NULL) && (tail->next != NULL))
-    tail = tail->next;
+	meta->next = NULL;
+	tail = n->meta;
+	while ((tail != NULL) && (tail->next != NULL))
+		tail = tail->next;
 
-  if (tail == NULL)
-    n->meta = meta;
-  else
-    tail->next = meta;
+	if (tail == NULL)
+		n->meta = meta;
+	else
+		tail->next = meta;
 
-  return (0);
+	return (0);
 } /* int plugin_notification_meta_add */
 
 int plugin_notification_meta_add_string (notification_t *n,
-    const char *name,
-    const char *value)
+		const char *name,
+		const char *value)
 {
-  return (plugin_notification_meta_add (n, name, NM_TYPE_STRING, value));
+	return (plugin_notification_meta_add (n, name, NM_TYPE_STRING, value));
 }
 
 int plugin_notification_meta_add_signed_int (notification_t *n,
-    const char *name,
-    int64_t value)
+		const char *name,
+		int64_t value)
 {
-  return (plugin_notification_meta_add (n, name, NM_TYPE_SIGNED_INT, &value));
+	return (plugin_notification_meta_add (n, name, NM_TYPE_SIGNED_INT, &value));
 }
 
 int plugin_notification_meta_add_unsigned_int (notification_t *n,
-    const char *name,
-    uint64_t value)
+		const char *name,
+		uint64_t value)
 {
-  return (plugin_notification_meta_add (n, name, NM_TYPE_UNSIGNED_INT, &value));
+	return (plugin_notification_meta_add (n, name, NM_TYPE_UNSIGNED_INT, &value));
 }
 
 int plugin_notification_meta_add_double (notification_t *n,
-    const char *name,
-    double value)
+		const char *name,
+		double value)
 {
-  return (plugin_notification_meta_add (n, name, NM_TYPE_DOUBLE, &value));
+	return (plugin_notification_meta_add (n, name, NM_TYPE_DOUBLE, &value));
 }
 
 int plugin_notification_meta_add_boolean (notification_t *n,
-    const char *name,
-    _Bool value)
+		const char *name,
+		_Bool value)
 {
-  return (plugin_notification_meta_add (n, name, NM_TYPE_BOOLEAN, &value));
+	return (plugin_notification_meta_add (n, name, NM_TYPE_BOOLEAN, &value));
 }
 
 int plugin_notification_meta_copy (notification_t *dst,
-    const notification_t *src)
+		const notification_t *src)
 {
-  notification_meta_t *meta;
+	notification_meta_t *meta;
 
-  assert (dst != NULL);
-  assert (src != NULL);
-  assert (dst != src);
-  assert ((src->meta == NULL) || (src->meta != dst->meta));
+	assert (dst != NULL);
+	assert (src != NULL);
+	assert (dst != src);
+	assert ((src->meta == NULL) || (src->meta != dst->meta));
 
-  for (meta = src->meta; meta != NULL; meta = meta->next)
-  {
-    if (meta->type == NM_TYPE_STRING)
-      plugin_notification_meta_add_string (dst, meta->name,
-          meta->nm_value.nm_string);
-    else if (meta->type == NM_TYPE_SIGNED_INT)
-      plugin_notification_meta_add_signed_int (dst, meta->name,
-          meta->nm_value.nm_signed_int);
-    else if (meta->type == NM_TYPE_UNSIGNED_INT)
-      plugin_notification_meta_add_unsigned_int (dst, meta->name,
-          meta->nm_value.nm_unsigned_int);
-    else if (meta->type == NM_TYPE_DOUBLE)
-      plugin_notification_meta_add_double (dst, meta->name,
-          meta->nm_value.nm_double);
-    else if (meta->type == NM_TYPE_BOOLEAN)
-      plugin_notification_meta_add_boolean (dst, meta->name,
-          meta->nm_value.nm_boolean);
-  }
+	for (meta = src->meta; meta != NULL; meta = meta->next)
+	{
+		if (meta->type == NM_TYPE_STRING)
+			plugin_notification_meta_add_string (dst, meta->name,
+					meta->nm_value.nm_string);
+		else if (meta->type == NM_TYPE_SIGNED_INT)
+			plugin_notification_meta_add_signed_int (dst, meta->name,
+					meta->nm_value.nm_signed_int);
+		else if (meta->type == NM_TYPE_UNSIGNED_INT)
+			plugin_notification_meta_add_unsigned_int (dst, meta->name,
+					meta->nm_value.nm_unsigned_int);
+		else if (meta->type == NM_TYPE_DOUBLE)
+			plugin_notification_meta_add_double (dst, meta->name,
+					meta->nm_value.nm_double);
+		else if (meta->type == NM_TYPE_BOOLEAN)
+			plugin_notification_meta_add_boolean (dst, meta->name,
+					meta->nm_value.nm_boolean);
+	}
 
-  return (0);
+	return (0);
 } /* int plugin_notification_meta_copy */
 
 int plugin_notification_meta_free (notification_meta_t *n)
 {
-  notification_meta_t *this;
-  notification_meta_t *next;
+	notification_meta_t *this;
+	notification_meta_t *next;
 
-  if (n == NULL)
-  {
-    ERROR ("plugin_notification_meta_free: n == NULL!");
-    return (-1);
-  }
+	if (n == NULL)
+	{
+		ERROR ("plugin_notification_meta_free: n == NULL!");
+		return (-1);
+	}
 
-  this = n;
-  while (this != NULL)
-  {
-    next = this->next;
+	this = n;
+	while (this != NULL)
+	{
+		next = this->next;
 
-    if (this->type == NM_TYPE_STRING)
-    {
-      /* Assign to a temporary variable to work around nm_string's const
-       * modifier. */
-      void *tmp = (void *) this->nm_value.nm_string;
+		if (this->type == NM_TYPE_STRING)
+		{
+			/* Assign to a temporary variable to work around nm_string's const
+			 * modifier. */
+			void *tmp = (void *) this->nm_value.nm_string;
 
-      sfree (tmp);
-      this->nm_value.nm_string = NULL;
-    }
-    sfree (this);
+			sfree (tmp);
+			this->nm_value.nm_string = NULL;
+		}
+		sfree (this);
 
-    this = next;
-  }
+		this = next;
+	}
 
-  return (0);
+	return (0);
 } /* int plugin_notification_meta_free */
 
 static void plugin_ctx_destructor (void *ctx)
 {
+	DEBUG("Destroying ctx");
 	sfree (ctx);
 } /* void plugin_ctx_destructor */
 
@@ -2782,6 +2792,7 @@ static plugin_ctx_t *plugin_ctx_create (void)
 {
 	plugin_ctx_t *ctx;
 
+	DEBUG("Creating ctx");
 	ctx = malloc (sizeof (*ctx));
 	if (ctx == NULL) {
 		char errbuf[1024];
@@ -2802,6 +2813,22 @@ void plugin_init_ctx (void)
 	pthread_key_create (&plugin_ctx_key, plugin_ctx_destructor);
 	plugin_ctx_key_initialized = 1;
 } /* void plugin_init_ctx */
+
+#if 0
+static void plugin_destroy_ctx (void)
+{
+	DEBUG("Destroying ctx");
+	plugin_ctx_t *ctx;
+
+	assert (plugin_ctx_key_initialized);
+	ctx = pthread_getspecific (plugin_ctx_key);
+	//	pthread_setspecific (plugin_ctx_key, NULL);
+	//	plugin_ctx_key_initialized = 0;
+	//	pthread_key_delete(plugin_ctx_key);
+
+	sfree(ctx);
+}
+#endif
 
 plugin_ctx_t plugin_get_ctx (void)
 {
