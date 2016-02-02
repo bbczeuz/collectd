@@ -96,6 +96,8 @@ long global_option_get_long_in_range (const char *option, long default_value, lo
 
 cdtime_t global_option_get_time (char const *option, cdtime_t default_value);
 
+void global_options_free();
+
 cdtime_t cf_get_default_interval (void);
 
 /* Assures the config option is a string, duplicates it and returns the copy in

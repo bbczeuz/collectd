@@ -959,6 +959,15 @@ int global_option_set (const char *option, const char *value)
 	return (0);
 }
 
+void global_options_free()
+{
+	int now_option;
+	for (now_option = 0; now_option < cf_global_options_num; ++now_option)
+	{
+		sfree(cf_global_options[now_option].value);
+	}
+}
+
 const char *global_option_get (const char *option)
 {
 	int i;
@@ -1088,6 +1097,7 @@ void cf_destroy_callbacks()
 			free(freed_callback);
 		}
 	}
+
 }
 
 void cf_register (const char *type,
@@ -1175,6 +1185,7 @@ int cf_read (char *filename)
 	}
 
 	oconfig_free (conf);
+	oconfig_free_globals();
 
 	/* Read the default types.db if no `TypesDB' option was given. */
 	if (cf_default_typesdb)

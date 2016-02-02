@@ -34,6 +34,7 @@
 
 extern FILE *yyin;
 extern int yyparse (void);
+extern int yylex_destroy  (void);
 
 oconfig_item_t *ci_root;
 const char     *c_file;
@@ -223,6 +224,11 @@ void oconfig_free (oconfig_item_t *ci)
   oconfig_free_all (ci);
   free (ci);
   ci = NULL;
+}
+
+void oconfig_free_globals()
+{
+  yylex_destroy();
 }
 
 /*

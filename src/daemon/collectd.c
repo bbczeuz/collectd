@@ -746,6 +746,7 @@ int main (int argc, char **argv)
 	INFO ("Exiting normally.");
 
 	do_shutdown ();
+	global_options_free();
 
 #if COLLECT_DAEMON
 	if (daemonize)

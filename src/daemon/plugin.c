@@ -464,11 +464,14 @@ static int plugin_load_file (char *file, uint32_t flags, lt_dlhandle *dlh)
 		return (1);
 	}
 
+	WARNING ("plugin_load_file: Successfully Loaded plugin %s", file);
+
 	if ((reg_handle = (void (*) (void)) lt_dlsym (*dlh, "module_register")) == NULL)
 	{
 		WARNING ("Couldn't find symbol \"module_register\" in \"%s\": %s\n",
 				file, lt_dlerror ());
 		lt_dlclose (*dlh);
+		*dlh = 0;
 		return (-1);
 	}
 
@@ -1112,7 +1115,7 @@ int plugin_load (char const *plugin_name, uint32_t flags)
 			continue;
 		}
 
-		lt_dlhandle handle;
+		lt_dlhandle handle = 0;
 		status = plugin_load_file (filename, flags, &handle);
 		if (status == 0)
 		{
@@ -2049,6 +2052,13 @@ void plugin_shutdown_all (void)
 	destroy_all_callbacks (&list_shutdown);
 	destroy_all_callbacks (&list_log);
 	cf_destroy_callbacks();
+
+        /* Unload libs loaded via libtool */
+        int rc;
+	while ((rc = lt_dlexit()) == 0)
+	{
+		;
+	}
 
 	plugin_free_loaded ();
 	plugin_free_data_sets ();
