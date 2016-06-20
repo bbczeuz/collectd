@@ -38,8 +38,6 @@
 #include <grp.h>
 #include <signal.h>
 
-#include <pthread.h>
-
 #define PL_NORMAL        0x01
 #define PL_NOTIF_ACTION  0x02
 
@@ -742,8 +740,7 @@ static void *exec_notification_one (void *arg) /* {{{ */
     char errbuf[1024];
     ERROR ("exec plugin: fdopen (%i) failed: %s", fd,
         sstrerror (errno, errbuf, sizeof (errbuf)));
-    kill (pl->pid, SIGTERM);
-    pl->pid = 0;
+    kill (pid, SIGTERM);
     close (fd);
     sfree (arg);
     pthread_exit ((void *) 1);

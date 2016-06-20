@@ -54,7 +54,6 @@
  */
 char hostname_g[DATA_MAX_NAME_LEN];
 cdtime_t interval_g;
-int  pidfile_from_cli = 0;
 int  timeout_g;
 #if HAVE_LIBKSTAT
 kstat_ctl_t *kc;
@@ -332,9 +331,7 @@ static int do_init (void)
 	}
 #endif
 
-	plugin_init_all ();
-
-	return (0);
+	return plugin_init_all ();
 } /* int do_init () */
 
 
@@ -388,8 +385,7 @@ static int do_loop (void)
 
 static int do_shutdown (void)
 {
-	plugin_shutdown_all ();
-	return (0);
+	return plugin_shutdown_all ();
 } /* int do_shutdown */
 
 #if COLLECT_DAEMON
@@ -554,15 +550,14 @@ int main (int argc, char **argv)
 				break;
 			case 'T':
 				test_readall = 1;
-				global_option_set ("ReadThreads", "-1");
+				global_option_set ("ReadThreads", "-1", 1);
 #if COLLECT_DAEMON
 				daemonize = 0;
 #endif /* COLLECT_DAEMON */
 				break;
 #if COLLECT_DAEMON
 			case 'P':
-				global_option_set ("PIDFile", optarg);
-				pidfile_from_cli = 1;
+				global_option_set ("PIDFile", optarg, 1);
 				break;
 			case 'f':
 				daemonize = 0;
@@ -729,12 +724,19 @@ int main (int argc, char **argv)
 	/*
 	 * run the actual loops
 	 */
-	do_init ();
+	if (do_init () != 0)
+	{
+		ERROR ("Error: one or more plugin init callbacks failed.");
+		exit_status = 1;
+	}
 
 	if (test_readall)
 	{
 		if (plugin_read_all_once () != 0)
+		{
+			ERROR ("Error: one or more plugin read callbacks failed.");
 			exit_status = 1;
+		}
 	}
 	else
 	{
@@ -745,7 +747,11 @@ int main (int argc, char **argv)
 	/* close syslog */
 	INFO ("Exiting normally.");
 
-	do_shutdown ();
+	if (do_shutdown () != 0)
+	{
+		ERROR ("Error: one or more plugin shutdown callbacks failed.");
+		exit_status = 1;
+	}
 
 #if COLLECT_DAEMON
 	if (daemonize)

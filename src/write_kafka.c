@@ -36,7 +36,6 @@
 
 #include <stdint.h>
 #include <librdkafka/rdkafka.h>
-#include <pthread.h>
 #include <zlib.h>
 #include <errno.h>
 
@@ -202,6 +201,8 @@ static int kafka_write(const data_set_t *ds, /* {{{ */
     key = ctx->key;
     if (key != NULL)
         keylen = strlen (key);
+    else
+        keylen = 0;
 
     rd_kafka_produce(ctx->topic, RD_KAFKA_PARTITION_UA,
                      RD_KAFKA_MSG_F_COPY, buffer, blen,
@@ -252,6 +253,7 @@ static void kafka_config_topic(rd_kafka_conf_t *conf, oconfig_item_t *ci) /* {{{
     tctx->escape_char = '.';
     tctx->store_rates = 1;
     tctx->format = KAFKA_FORMAT_JSON;
+    tctx->key = NULL;
 
     if ((tctx->kafka_conf = rd_kafka_conf_dup(conf)) == NULL) {
         sfree(tctx);
@@ -315,6 +317,7 @@ static void kafka_config_topic(rd_kafka_conf_t *conf, oconfig_item_t *ci) /* {{{
 
         } else if (strcasecmp ("Key", child->key) == 0)  {
             cf_util_get_string (child, &tctx->key);
+            assert (tctx->key != NULL);
         } else if (strcasecmp ("Format", child->key) == 0) {
             status = cf_util_get_string(child, &key);
             if (status != 0)
