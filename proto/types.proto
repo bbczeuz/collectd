@@ -25,32 +25,46 @@
 syntax = "proto3";
 
 package collectd.types;
+option go_package = "collectd.org/rpc/proto/types";
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 message Identifier {
-	string host = 1;
-	string plugin = 2;
-	string plugin_instance = 3;
-	string type = 4;
-	string type_instance = 5;
+  string host = 1;
+  string plugin = 2;
+  string plugin_instance = 3;
+  string type = 4;
+  string type_instance = 5;
+}
+
+message MetadataValue {
+  oneof value {
+    string string_value = 1;
+    int64 int64_value = 2;
+    uint64 uint64_value = 3;
+    double double_value = 4;
+    bool bool_value = 5;
+  };
 }
 
 message Value {
-	oneof value {
-		uint64 counter = 1;
-		double gauge = 2;
-		int64 derive = 3;
-		uint64 absolute = 4;
-	};
+  oneof value {
+    uint64 counter = 1;
+    double gauge = 2;
+    int64 derive = 3;
+    uint64 absolute = 4;
+  };
 }
 
 message ValueList {
-	repeated Value value = 1;
+  repeated Value values = 1;
 
-	google.protobuf.Timestamp time = 2;
-	google.protobuf.Duration interval = 3;
+  google.protobuf.Timestamp time = 2;
+  google.protobuf.Duration interval = 3;
 
-	Identifier identifier = 4;
+  Identifier identifier = 4;
+
+  repeated string ds_names = 5;
+  map<string, MetadataValue> meta_data = 6;
 }

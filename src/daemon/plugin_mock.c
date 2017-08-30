@@ -32,46 +32,88 @@ kstat_ctl_t *kc = NULL;
 
 char hostname_g[] = "example.com";
 
-int plugin_register_complex_config (const char *type, int (*callback) (oconfig_item_t *))
-{
+void plugin_set_dir(const char *dir) { /* nop */
+}
+
+int plugin_load(const char *name, _Bool global) { return ENOTSUP; }
+
+int plugin_register_config(const char *name,
+                           int (*callback)(const char *key, const char *val),
+                           const char **keys, int keys_num) {
   return ENOTSUP;
 }
 
-int plugin_register_init (const char *name, plugin_init_cb callback)
-{
+int plugin_register_complex_config(const char *type,
+                                   int (*callback)(oconfig_item_t *)) {
   return ENOTSUP;
 }
 
-int plugin_register_read (const char *name, int (*callback) (void))
-{
+int plugin_register_init(const char *name, plugin_init_cb callback) {
   return ENOTSUP;
 }
 
-int plugin_register_shutdown (const char *name, int (*callback) (void))
-{
+int plugin_register_read(const char *name, int (*callback)(void)) {
   return ENOTSUP;
 }
 
-int plugin_dispatch_values (value_list_t const *vl)
-{
+int plugin_register_complex_read(const char *group, const char *name,
+                                 int (*callback)(user_data_t *),
+                                 cdtime_t interval,
+                                 user_data_t const *user_data) {
   return ENOTSUP;
 }
 
-void plugin_log (int level, char const *format, ...)
-{
+int plugin_register_shutdown(const char *name, int (*callback)(void)) {
+  return ENOTSUP;
+}
+
+int plugin_register_data_set(const data_set_t *ds) { return ENOTSUP; }
+
+int plugin_dispatch_values(value_list_t const *vl) { return ENOTSUP; }
+
+int plugin_flush(const char *plugin, cdtime_t timeout, const char *identifier) {
+  return ENOTSUP;
+}
+
+static data_source_t magic_ds[] = {{"value", DS_TYPE_DERIVE, 0.0, NAN}};
+static data_set_t magic = {"MAGIC", 1, magic_ds};
+const data_set_t *plugin_get_ds(const char *name) {
+  if (strcmp(name, "MAGIC"))
+    return NULL;
+
+  return &magic;
+}
+
+void plugin_log(int level, char const *format, ...) {
   char buffer[1024];
   va_list ap;
 
-  va_start (ap, format);
-  vsnprintf (buffer, sizeof (buffer), format, ap);
-  va_end (ap);
+  va_start(ap, format);
+  vsnprintf(buffer, sizeof(buffer), format, ap);
+  va_end(ap);
 
-  printf ("plugin_log (%i, \"%s\");\n", level, buffer);
+  printf("plugin_log (%i, \"%s\");\n", level, buffer);
 }
 
-cdtime_t plugin_get_interval (void)
-{
-  return TIME_T_TO_CDTIME_T (10);
+void plugin_init_ctx(void) { /* nop */
 }
 
-/* vim: set sw=2 sts=2 et : */
+plugin_ctx_t mock_context = {
+    .interval = TIME_T_TO_CDTIME_T_STATIC(10),
+};
+
+plugin_ctx_t plugin_get_ctx(void) { return mock_context; }
+
+plugin_ctx_t plugin_set_ctx(plugin_ctx_t ctx) {
+  plugin_ctx_t prev = mock_context;
+  mock_context = ctx;
+  return prev;
+}
+
+cdtime_t plugin_get_interval(void) { return mock_context.interval; }
+
+/* TODO(octo): this function is actually from filter_chain.h, but in order not
+ * to tumble down that rabbit hole, we're declaring it here. A better solution
+ * would be to hard-code the top-level config keys in daemon/collectd.c to avoid
+ * having these references in daemon/configfile.c. */
+int fc_configure(const oconfig_item_t *ci) { return ENOTSUP; }
